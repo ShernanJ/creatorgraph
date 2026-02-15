@@ -1,6 +1,4 @@
-# CreatorGraph
-
-## CreatorGraph — Creator Partnership Intelligence Platform
+# CreatorGraph — Creator Partnership Intelligence Platform
 
 CreatorGraph is an automated brand-to-creator deal generation layer designed to integrate directly into creator ecosystems like Stan.
 
