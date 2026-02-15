@@ -1,0 +1,46 @@
+[
+  {
+    "id": "cr_001",
+    "name": "alex chen",
+    "niche": "b2b saas",
+    "platforms": ["linkedin", "x"],
+    "audience_types": ["founders", "operators", "product managers"],
+    "content_style": "storytelling + frameworks",
+    "products_sold": ["templates", "coaching"],
+    "sample_links": ["https://example.com/alex"],
+    "estimated_engagement": 0.048
+  },
+  {
+    "id": "cr_002",
+    "name": "mia rivera",
+    "niche": "skincare",
+    "platforms": ["instagram", "tiktok"],
+    "audience_types": ["women 18-34", "beauty shoppers"],
+    "content_style": "ugc demos + reviews",
+    "products_sold": ["affiliate links", "digital guide"],
+    "sample_links": ["https://example.com/mia"],
+    "estimated_engagement": 0.061
+  },
+  {
+    "id": "cr_003",
+    "name": "jordan price",
+    "niche": "fitness",
+    "platforms": ["tiktok", "instagram"],
+    "audience_types": ["gym beginners", "weight loss"],
+    "content_style": "before/after + routines",
+    "products_sold": ["programs", "supplements"],
+    "sample_links": ["https://example.com/jordan"],
+    "estimated_engagement": 0.055
+  },
+  {
+    "id": "cr_004",
+    "name": "sara ng",
+    "niche": "personal finance",
+    "platforms": ["youtube", "x"],
+    "audience_types": ["young professionals", "students"],
+    "content_style": "educational breakdowns",
+    "products_sold": ["course", "newsletter"],
+    "sample_links": ["https://example.com/sara"],
+    "estimated_engagement": 0.043
+  }
+]
