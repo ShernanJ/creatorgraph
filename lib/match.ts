@@ -25,6 +25,7 @@ export type Brand = {
   goals: string[];
   preferred_platforms: string[];
   campaign_angles?: string[]; // ✅ used for topic overlap
+  match_topics?: string[];
 };
 
 function normalizeTopic(t: string) {
@@ -101,12 +102,13 @@ export function scoreMatch(brand: Brand, creator: Creator) {
       : 0.3
     : 0.4;
 
-  const platformScore = overlap(brand.preferred_platforms ?? [], creator.platforms ?? []);
+  const bp = (brand.preferred_platforms ?? []).map((p) => String(p).toLowerCase());
+  const cp = (creator.platforms ?? []).map((p) => String(p).toLowerCase());
+  const platformScore = cp.some((p) => bp.includes(p)) ? 1 : 0;
+    
 
-  const brandTopics = (brand.campaign_angles?.length
-    ? brand.campaign_angles
-    : brand.goals
-  ) ?? [];
+  const brandTopics =
+  brand.match_topics?.length ? brand.match_topics : (brand.campaign_angles ?? brand.goals);
   
   const creatorTopics = creator?.metrics?.top_topics ?? [];
   
