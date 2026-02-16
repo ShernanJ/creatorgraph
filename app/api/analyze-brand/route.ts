@@ -17,9 +17,7 @@ function stripHtml(html: string) {
   });
 }
 
-/**
- * Extract the first top-level JSON object if the model wraps it in extra text.
- */
+/** Extract the first top-level JSON object if the model wraps it in extra text. */
 function extractJson(s: string) {
   const start = s.indexOf("{");
   const end = s.lastIndexOf("}");
@@ -27,66 +25,93 @@ function extractJson(s: string) {
   return s.slice(start, end + 1);
 }
 
-export async function POST(req: Request) {
-  const { url } = await req.json();
+function normalizeUrl(input: string) {
+  const s = input.trim();
+  if (!s) return null;
+  // if user types "nike.com" → make it valid
+  if (!/^https?:\/\//i.test(s)) return `https://${s}`;
+  return s;
+}
 
-  if (!url || typeof url !== "string") {
-    return NextResponse.json({ error: "missing url" }, { status: 400 });
+function json400(error: string, extra?: any) {
+  console.error("[analyze-brand] 400:", error, extra ?? "");
+  return NextResponse.json({ error, ...extra }, { status: 400 });
+}
+
+export async function POST(req: Request) {
+  const body = await req.json().catch(() => null);
+  if (!body) return json400("invalid json body");
+
+  // accept both keys so UI can't drift
+  const raw = body.url ?? body.website ?? body.brandUrl;
+  if (!raw || typeof raw !== "string") {
+    return json400("missing url", { received: body });
   }
+
+  const url = normalizeUrl(raw);
+  if (!url) return json400("empty url");
+  try {
+    // validate URL early (catches "htp://" etc.)
+    new URL(url);
+  } catch {
+    return json400("invalid url", { url });
+  }
+
+  // fetch with timeout
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 12_000);
 
   let html = "";
   try {
     const res = await fetch(url, {
       redirect: "follow",
-      // basic headers help some sites return consistent HTML
+      signal: controller.signal,
       headers: {
         "User-Agent":
-          "Mozilla/5.0 (compatible; StanForBrandsBot/1.0; +https://example.com)",
+          "Mozilla/5.0 (compatible; CreatorGraphBot/1.0; +https://example.com)",
         Accept: "text/html,application/xhtml+xml",
       },
     });
 
     if (!res.ok) {
-      return NextResponse.json(
-        { error: "failed to fetch url", status: res.status },
-        { status: 400 }
-      );
+      clearTimeout(timeout);
+      return json400("failed to fetch url", {
+        url,
+        status: res.status,
+        statusText: res.statusText,
+      });
     }
 
     html = await res.text();
   } catch (e: any) {
-    return NextResponse.json(
-      { error: "fetch threw error", message: e?.message ?? String(e) },
-      { status: 400 }
-    );
+    clearTimeout(timeout);
+    return json400("fetch threw error", {
+      url,
+      message: e?.message ?? String(e),
+      name: e?.name,
+      // AbortError helps you distinguish timeout from other failures
+    });
+  } finally {
+    clearTimeout(timeout);
   }
 
-  const text = stripHtml(html).slice(0, 20000);
+  const text = stripHtml(html).slice(0, 12000);
 
   const prompt = brandProfilePrompt(url, text);
-  const raw = await groqText(prompt, {
+  const rawOut = await groqText(prompt, {
     system: "return only valid json. no markdown. no extra text.",
     temperature: 0.1,
-    maxCompletionTokens: 900,
+    maxCompletionTokens: 600,
   });
-  console.log(raw);
 
-  const json = extractJson(raw);
-  if (!json) {
-    return NextResponse.json(
-      { error: "LLM returned non-json", raw },
-      { status: 400 }
-    );
-  }
+  const json = extractJson(rawOut);
+  if (!json) return json400("LLM returned non-json", { raw: rawOut });
 
   let profile: any;
   try {
     profile = JSON.parse(json);
   } catch {
-    return NextResponse.json(
-      { error: "LLM returned invalid json", raw },
-      { status: 400 }
-    );
+    return json400("LLM returned invalid json", { raw: rawOut });
   }
 
   const id = `br_${nanoid(10)}`;
