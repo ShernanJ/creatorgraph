@@ -1,3 +1,5 @@
+// app/api/match-creators/route.ts
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from "next/server";
 import { nanoid } from "nanoid";
@@ -14,12 +16,13 @@ export async function POST(req: Request) {
 
   const ranked = creators
     .map((c) => {
-      const { score, reasons } = scoreMatch(
+      const { score, reasons, breakdown } = scoreMatch(
         {
           category: brand.category,
           target_audience: brand.target_audience ?? [],
           goals: brand.goals ?? [],
           preferred_platforms: brand.preferred_platforms ?? [],
+          campaign_angles: brand.campaign_angles ?? [], // ✅ added
         },
         {
           id: c.id,
@@ -29,9 +32,11 @@ export async function POST(req: Request) {
           content_style: c.content_style,
           products_sold: c.products_sold ?? [],
           estimated_engagement: c.estimated_engagement,
-        }
+          metrics: c.metrics ?? {}, // ✅ added (jsonb)
+        } as any
       );
-      return { creator: c, score, reasons };
+
+      return { creator: c, score, reasons, breakdown };
     })
     .sort((a, b) => b.score - a.score)
     .slice(0, 12);
@@ -42,9 +47,23 @@ export async function POST(req: Request) {
       `insert into matches (id, brand_id, creator_id, score, reasons)
        values ($1,$2,$3,$4,$5::jsonb)
        on conflict do nothing`,
-      [`mt_${nanoid(10)}`, brandId, r.creator.id, r.score, JSON.stringify(r.reasons)]
+      [
+        `mt_${nanoid(10)}`,
+        brandId,
+        r.creator.id,
+        r.score,
+        JSON.stringify({ reasons: r.reasons, breakdown: r.breakdown }), // ✅ store explainability
+      ]
     );
   }
 
-  return NextResponse.json({ brandId, ranked });
+  return NextResponse.json({
+    brandId,
+    ranked: ranked.map((r) => ({
+      creator: r.creator,
+      score: r.score,
+      reasons: r.reasons,
+      breakdown: r.breakdown,
+    })),
+  });
 }
