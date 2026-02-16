@@ -92,7 +92,48 @@ topic scores stayed low even for perfect matches.
 
 ---
 
-## phase 3 — new architecture vision (current direction)
+## phase 3 — ontology layer introduced (big turning point)
+
+### what changed
+
+instead of forcing marketing language to match creator language, i split the concept space:
+
+* `campaign_angles` → messaging layer (for briefs + outreach)
+* `match_topics` → creator-native topic layer (for scoring)
+
+brands are now projected into the same topic space creators live in.
+
+### why this mattered
+
+* matching finally became intuitive
+* obvious matches started making sense logically
+* scoring stopped feeling random
+
+this wasn’t a prompt tweak — it was a representation upgrade.
+
+### realization
+
+> intelligence systems live or die on shared vocabularies
+
+---
+
+## phase 4 — system correctness + real engineering discipline
+
+### fixes added
+
+* unique constraint on `(brand_id, creator_id)`
+* upsert matching instead of duplicate inserts
+* structured reasons + breakdown stored per match
+
+### why it mattered
+
+* recomputing matches is now deterministic
+* database reflects reality, not noise
+* pipeline behaves like real infra, not a hacky demo
+
+---
+
+## phase 5 — new architecture vision (current direction)
 
 ### principle
 
@@ -118,22 +159,16 @@ topic scores stayed low even for perfect matches.
 
 ### matching (intelligence layer)
 
-* deterministic scoring using real aligned topics
+* deterministic scoring using aligned ontology topics
 * explainable breakdowns
 * rankings + confidence that feel human-correct
 
 ---
 
-## phase 4
-
-* ingests reality through automation
-* structures knowledge through AI
-* makes transparent decisions
-
-### core principles locked in
+## core principles locked in
 
 * measurable signals over vibes
-* deterministic first, ML later
+* deterministic first, ml later
 * automation by default
 * explainability always
 * workers gather truth, models reason
@@ -142,11 +177,10 @@ topic scores stayed low even for perfect matches.
 
 ## notes to reflect
 
-the biggest improvement didn’t come from changing models.
+biggest improvements didn’t come from changing models.
 
-it came from understanding:
+they came from understanding:
 
 > how intelligence systems should be built.
 
-good data → structured reasoning → deterministic decisions.
-
+good data → shared ontology → structured reasoning → deterministic decisions.
