@@ -8,7 +8,16 @@
     "content_style": "storytelling + frameworks",
     "products_sold": ["templates", "coaching"],
     "sample_links": ["https://example.com/alex"],
-    "estimated_engagement": 0.048
+    "estimated_engagement": 0.048,
+    "metrics": {
+      "top_topics": ["b2b saas", "go-to-market", "product strategy", "founder ops"],
+      "post_frequency_per_week": 4,
+      "content_formats": ["threads", "carousels", "short posts"],
+      "platform_metrics": {
+        "linkedin": { "followers": 22000, "avg_views": 18000, "engagement_rate": 0.048 },
+        "x": { "followers": 12000, "avg_views": 9000, "engagement_rate": 0.032 }
+      }
+    }
   },
   {
     "id": "cr_002",
@@ -19,7 +28,16 @@
     "content_style": "ugc demos + reviews",
     "products_sold": ["affiliate links", "digital guide"],
     "sample_links": ["https://example.com/mia"],
-    "estimated_engagement": 0.061
+    "estimated_engagement": 0.061,
+    "metrics": {
+      "top_topics": ["skincare", "beauty", "acne", "routine", "product reviews"],
+      "post_frequency_per_week": 5,
+      "content_formats": ["tiktok videos", "instagram reels", "instagram stories"],
+      "platform_metrics": {
+        "instagram": { "followers": 54000, "avg_views": 42000, "engagement_rate": 0.061 },
+        "tiktok": { "followers": 78000, "avg_views": 65000, "engagement_rate": 0.054 }
+      }
+    }
   },
   {
     "id": "cr_003",
@@ -30,7 +48,16 @@
     "content_style": "before/after + routines",
     "products_sold": ["programs", "supplements"],
     "sample_links": ["https://example.com/jordan"],
-    "estimated_engagement": 0.055
+    "estimated_engagement": 0.055,
+    "metrics": {
+      "top_topics": ["fitness", "weight loss", "gym routines", "nutrition", "home workouts"],
+      "post_frequency_per_week": 6,
+      "content_formats": ["tiktok videos", "instagram reels", "before/after posts"],
+      "platform_metrics": {
+        "tiktok": { "followers": 130000, "avg_views": 90000, "engagement_rate": 0.055 },
+        "instagram": { "followers": 68000, "avg_views": 52000, "engagement_rate": 0.041 }
+      }
+    }
   },
   {
     "id": "cr_004",
@@ -41,6 +68,15 @@
     "content_style": "educational breakdowns",
     "products_sold": ["course", "newsletter"],
     "sample_links": ["https://example.com/sara"],
-    "estimated_engagement": 0.043
+    "estimated_engagement": 0.043,
+    "metrics": {
+      "top_topics": ["personal finance", "investing", "budgeting", "credit cards", "saving"],
+      "post_frequency_per_week": 3,
+      "content_formats": ["youtube videos", "x threads", "explainers"],
+      "platform_metrics": {
+        "youtube": { "followers": 95000, "avg_views": 72000, "engagement_rate": 0.043 },
+        "x": { "followers": 26000, "avg_views": 14000, "engagement_rate": 0.028 }
+      }
+    }
   }
 ]

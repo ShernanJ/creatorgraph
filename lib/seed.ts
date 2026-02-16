@@ -16,7 +16,9 @@ type CreatorSeed = {
   products_sold: string[];
   sample_links: string[];
   estimated_engagement?: number;
+  metrics?: unknown; // json blob (keep flexible)
 };
+
 
 function requireEnv(name: string) {
   const v = process.env[name];
@@ -44,9 +46,9 @@ async function main() {
     await pool.query(
       `
       insert into creators
-        (id, name, niche, platforms, audience_types, content_style, products_sold, sample_links, estimated_engagement)
+        (id, name, niche, platforms, audience_types, content_style, products_sold, sample_links, estimated_engagement, metrics)
       values
-        ($1,$2,$3,$4::jsonb,$5::jsonb,$6,$7::jsonb,$8::jsonb,$9)
+        ($1,$2,$3,$4::jsonb,$5::jsonb,$6,$7::jsonb,$8::jsonb,$9,$10::jsonb)
       on conflict (id) do update set
         name=excluded.name,
         niche=excluded.niche,
@@ -55,7 +57,8 @@ async function main() {
         content_style=excluded.content_style,
         products_sold=excluded.products_sold,
         sample_links=excluded.sample_links,
-        estimated_engagement=excluded.estimated_engagement
+        estimated_engagement=excluded.estimated_engagement,
+        metrics=excluded.metrics
       `,
       [
         c.id,
@@ -67,8 +70,9 @@ async function main() {
         JSON.stringify(c.products_sold ?? []),
         JSON.stringify(c.sample_links ?? []),
         c.estimated_engagement ?? null,
+        JSON.stringify(c.metrics ?? {}),
       ]
-    );
+    );    
   }
 
   const count = await pool.query(`select count(*)::int as c from creators`);

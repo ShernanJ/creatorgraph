@@ -9,8 +9,9 @@ create table if not exists creators (
   products_sold jsonb not null default '[]',
   sample_links jsonb not null default '[]',
   estimated_engagement numeric,
-  created_at timestamptz not null default now()
+  metrics jsonb not null default '{}'::jsonb
 );
+
 
 -- brands
 create table if not exists brands (
