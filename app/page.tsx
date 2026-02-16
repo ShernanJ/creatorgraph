@@ -9,21 +9,23 @@ export default function HomePage() {
   const [url, setUrl] = React.useState("");
   const [loading, setLoading] = React.useState(false);
   const [err, setErr] = React.useState<string | null>(null);
-
+  
   async function onAnalyze() {
-    setErr(null);
     setLoading(true);
+    setErr(null);
     try {
       const res = await fetch("/api/analyze-brand", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url }),
+        body: JSON.stringify({ url }), // or website
       });
+  
       const data = await res.json();
-      if (!res.ok) throw new Error(data?.error ?? "failed to analyze brand");
+      if (!res.ok) throw new Error(data?.error ?? "failed");
+  
       router.push(`/brand/${data.brandId}`);
     } catch (e: any) {
-      setErr(e?.message ?? "error");
+      setErr(e?.message ?? "something went wrong");
     } finally {
       setLoading(false);
     }
@@ -50,13 +52,25 @@ export default function HomePage() {
 
         <button
           onClick={onAnalyze}
-          disabled={loading || !url}
+          disabled={loading}
           className="rounded-xl bg-white text-black px-4 py-3 font-medium disabled:opacity-50"
         >
-          {loading ? "analyzing..." : "analyze brand"}
+          {loading ? "analyzing…" : "analyze brand"}
         </button>
 
-        {err ? <p className="text-sm text-red-300">{err}</p> : null}
+        {loading && (
+          <div className="mt-3 text-sm opacity-80">
+            fetching site → extracting → generating profile…
+          </div>
+        )}
+
+        {err && (
+          <div className="mt-3 text-sm text-red-400">
+            {err}
+          </div>
+        )}
+
+
       </div>
     </main>
   );

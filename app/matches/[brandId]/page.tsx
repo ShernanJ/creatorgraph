@@ -5,17 +5,45 @@ export const revalidate = 0;
 import Link from "next/link";
 import { q } from "@/lib/db";
 
-async function computeMatchesIfNeeded(brandId: string) {
-  const existing = await q<{ c: number }>(
-    `select count(*)::int as c from matches where brand_id=$1`,
-    [brandId]
-  );
+function normalizeReasons(input: any): { reasons: string[]; breakdown?: any } {
+  if (!input) return { reasons: [] };
 
-  if ((existing?.[0]?.c ?? 0) > 0) return;
+  // If reasons is stored as JSON string
+  const parsed =
+    typeof input === "string"
+      ? (() => {
+          try {
+            return JSON.parse(input);
+          } catch {
+            return input;
+          }
+        })()
+      : input;
 
-  const base =
-    process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+  // Old shape: ["a", "b"]
+  if (Array.isArray(parsed)) return { reasons: parsed };
 
+  // New shape: { reasons: [...], breakdown: {...} }
+  if (parsed && typeof parsed === "object") {
+    const reasons = Array.isArray((parsed as any).reasons) ? (parsed as any).reasons : [];
+    return { reasons, breakdown: (parsed as any).breakdown };
+  }
+
+  return { reasons: [] };
+}
+
+async function computeMatchesIfNeeded(brandId: string, refresh: boolean) {
+  if (!refresh) {
+    const existing = await q<{ c: number }>(
+      `select count(*)::int as c from matches where brand_id=$1`,
+      [brandId]
+    );
+    if ((existing?.[0]?.c ?? 0) > 0) return;
+  } else {
+    await q(`delete from matches where brand_id=$1`, [brandId]);
+  }
+
+  const base = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
   await fetch(`${base}/api/match-creators`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -24,12 +52,15 @@ async function computeMatchesIfNeeded(brandId: string) {
   });
 }
 
+
 export default async function MatchesPage(props: {
   params: Promise<{ brandId: string }>;
+  searchParams: Promise<{ refresh?: string }>;
 }) {
   const { brandId } = await props.params;
+  const { refresh } = await props.searchParams;
 
-  await computeMatchesIfNeeded(brandId);
+  await computeMatchesIfNeeded(brandId, refresh === "true");
 
   const [brand] = await q<any>(`select * from brands where id=$1`, [brandId]);
 
@@ -51,44 +82,58 @@ export default async function MatchesPage(props: {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        {matches.map((m: any) => (
-          <div
-            key={m.id}
-            className="rounded-2xl bg-white/5 ring-1 ring-white/10 p-5 space-y-3"
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="font-semibold">{m.name}</p>
-                <p className="text-white/60 text-sm">
-                  {m.niche} • {(m.platforms ?? []).join(", ")}
+        {matches.map((m: any) => {
+          const meta = normalizeReasons(m.reasons);
+          const reasonsText = meta.reasons.join(" • ");
+
+          return (
+            <div
+              key={m.id}
+              className="rounded-2xl bg-white/5 ring-1 ring-white/10 p-5 space-y-3"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="font-semibold">{m.name}</p>
+                  <p className="text-white/60 text-sm">
+                    {m.niche} • {(m.platforms ?? []).join(", ")}
+                  </p>
+                </div>
+                <div className="text-sm rounded-lg bg-white/10 px-2 py-1">
+                  {(Number(m.score) * 100).toFixed(0)}%
+                </div>
+              </div>
+
+              <p className="text-sm text-white/70">{reasonsText || "—"}</p>
+
+              {meta.breakdown && (
+                <p className="text-xs text-white/50">
+                  niche {meta.breakdown.nicheScore} · topics {meta.breakdown.topicScore} ·
+                  platform {meta.breakdown.platformScore} · engagement{" "}
+                  {meta.breakdown.engagementScore}
+                  {meta.breakdown.bestPlatform ? ` · best ${meta.breakdown.bestPlatform}` : ""}
                 </p>
-              </div>
-              <div className="text-sm rounded-lg bg-white/10 px-2 py-1">
-                {(Number(m.score) * 100).toFixed(0)}%
+              )}
+
+              <div className="flex gap-3 flex-wrap">
+                <Link
+                  href={`/creator/${m.id}?brandId=${brandId}`}
+                  className="inline-flex rounded-xl bg-white text-black px-3 py-2 font-medium"
+                >
+                  generate outreach →
+                </Link>
+
+                <a
+                  href={(m.sample_links ?? [])[0] || "#"}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex rounded-xl bg-white/10 text-white px-3 py-2 font-medium ring-1 ring-white/15"
+                >
+                  view creator →
+                </a>
               </div>
             </div>
-
-            <p className="text-sm text-white/70">
-              {(m.reasons ?? []).join(" • ") || "—"}
-            </p>
-
-            <div className="flex gap-3 flex-wrap">
-              <Link
-                href={`/creator/${m.id}?brandId=${brandId}`}
-                className="inline-flex rounded-xl bg-white text-black px-3 py-2 font-medium"
-              >
-                generate outreach →
-              </Link>
-
-              <a
-                href={(m.sample_links ?? [])[0] || "#"}
-                className="inline-flex rounded-xl bg-white/10 text-white px-3 py-2 font-medium ring-1 ring-white/15"
-              >
-                view creator →
-              </a>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <div className="pt-6">
