@@ -201,49 +201,117 @@ this made scores feel human-correct.
 
 ---
 
-## phase 7 — economic layer realization (next frontier)
+## phase 7 — economic realism (cpm + pricing power layer)
 
-### new discovery
+### new realization
 
-matching isn’t enough.
+compatibility is necessary.
+but not sufficient.
 
-creators also ask:
+in real creator markets, price is not arbitrary.
 
-> is this worth my time?
+it is loosely correlated with:
 
-brands ask:
+* avg_views (distribution power)
+* engagement rate (audience responsiveness)
+* niche cpm norms
+* format type (reel vs static vs youtube)
 
-> can we afford this creator?
+### real-world cpm ranges (rough priors)
 
-engagement isn’t just ranking.
-it signals pricing power.
+these aren’t exact — but directionally true:
 
-### emerging model
+* lifestyle → $15–$25 cpm
+* fitness → $20–$35 cpm
+* ecommerce → $25–$45 cpm
+* finance → $40–$70 cpm
+* b2b saas → $60–$120 cpm
 
-* estimate price_per_post using avg_views × niche_cpm
-* compare against brand budget
-* compute economic feasibility score
+rough pricing heuristic:
 
-this introduces:
+```
+price_per_post ≈ (avg_views / 1000) × niche_cpm
+```
 
-> market equilibrium modeling
+example:
 
-creatorgraph becomes not just compatibility scoring,
-but deal feasibility intelligence.
+if a fitness creator averages 90,000 views
+and fitness cpm prior = $25
 
-this is phase 8+.
+```
+(90,000 / 1000) × 25 = $2,250 per post
+```
+
+suddenly engagement is not just ranking.
+it’s leverage.
+
+### why this changes the system
+
+before:
+
+> engagement_score = signal strength
+
+now:
+
+> engagement + avg_views = pricing power
+
+which means:
+
+* high engagement creators likely cost more
+* lower engagement creators may be affordable but less efficient
+
+this introduces a third dimension:
+
+1. semantic compatibility
+2. execution strength
+3. economic feasibility
+
+### system reconsideration
+
+previously, scoring assumed:
+
+> the best semantic match is the best recommendation.
+
+but in reality:
+
+> the best viable match within budget is the best recommendation.
+
+this reframes creatorgraph from:
+
+compatibility engine
+
+into:
+
+deal feasibility engine.
+
+### upcoming direction
+
+add:
+
+* estimated_price_per_post (derived from avg_views × niche_cpm)
+* brand budget per deliverable
+* economic feasibility score
+
+so the system can reason:
+
+* "this creator fits but is likely above your budget"
+* "these 3 creators maximize fit within your price range"
+
+this is not ml.
+
+this is marketplace physics.
 
 ---
 
 ## current mental model
 
-creatorgraph is:
+creatorgraph is evolving from:
 
-> a semantic compatibility engine with execution filters
+> semantic compatibility engine
 
-soon evolving into:
+into:
 
-> a deal feasibility intelligence system
+> semantic + execution + economic intelligence system
 
 architecture principle:
 
@@ -272,7 +340,9 @@ they came from changing:
 * representation
 * ontology
 * system architecture
-* feedback loops
+* grounding
+* calibration
+* economic context
 
 > good data → shared ontology → structured reasoning → deterministic decisions → economic calibration
 
