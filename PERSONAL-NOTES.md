@@ -124,6 +124,7 @@ this wasn’t a prompt tweak — it was a representation upgrade.
 * unique constraint on `(brand_id, creator_id)`
 * upsert matching instead of duplicate inserts
 * structured reasons + breakdown stored per match
+* normalized json handling across pages (no more `.join` crashes)
 
 ### why it mattered
 
@@ -131,37 +132,122 @@ this wasn’t a prompt tweak — it was a representation upgrade.
 * database reflects reality, not noise
 * pipeline behaves like real infra, not a hacky demo
 
----
-
-## phase 5 — new architecture vision (current direction)
-
-### principle
-
-**deterministic systems gather reality → models structure it → logic decides**
+this was the moment it stopped being a toy.
 
 ---
 
-### workers (engineering layer)
+## phase 5 — crawler layer (grounding reality)
 
-* crawl brand websites with playwright
-* fetch multiple pages (home, pricing, features, about, case studies)
-* extract clean text + evidence snippets
-* store grounded data
+### shift in thinking
 
-### ai (reasoning layer)
+homepage scraping wasn’t enough.
 
-* turn crawl data into structured dossiers
-* classify category, icp, offerings
-* generate:
+brand representation needed:
 
-  * `campaign_angles` (marketing messaging)
-  * `match_topics` (creator-native content topics)
+* pricing pages
+* about pages
+* positioning language
+* product details
+* testimonials
 
-### matching (intelligence layer)
+### what i built
 
-* deterministic scoring using aligned ontology topics
-* explainable breakdowns
-* rankings + confidence that feel human-correct
+* `/api/crawl-brand` using playwright
+* multi-page crawl
+* stored structured brand_pages
+* added rebuild dossier button (crawl → analyze loop)
+
+### why this mattered
+
+this added **ground truth**.
+
+not just llm inference — but:
+
+> extracted evidence → structured dossier → deterministic scoring
+
+this created the wow factor.
+
+real infra.
+
+---
+
+## phase 6 — scoring philosophy recalibration
+
+### insight
+
+platform + engagement are not primary semantic signals.
+
+niche + topics decide:
+
+> is this the right type of creator?
+
+platform + engagement decide:
+
+> is this a good execution vehicle?
+
+### weight update
+
+moved toward:
+
+* 0.45 niche
+* 0.35 topics
+* 0.10 platform
+* 0.10 engagement
+
+80% semantic fit.
+20% execution quality.
+
+this made scores feel human-correct.
+
+---
+
+## phase 7 — economic layer realization (next frontier)
+
+### new discovery
+
+matching isn’t enough.
+
+creators also ask:
+
+> is this worth my time?
+
+brands ask:
+
+> can we afford this creator?
+
+engagement isn’t just ranking.
+it signals pricing power.
+
+### emerging model
+
+* estimate price_per_post using avg_views × niche_cpm
+* compare against brand budget
+* compute economic feasibility score
+
+this introduces:
+
+> market equilibrium modeling
+
+creatorgraph becomes not just compatibility scoring,
+but deal feasibility intelligence.
+
+this is phase 8+.
+
+---
+
+## current mental model
+
+creatorgraph is:
+
+> a semantic compatibility engine with execution filters
+
+soon evolving into:
+
+> a deal feasibility intelligence system
+
+architecture principle:
+
+workers gather reality → models structure knowledge → deterministic logic decides → economics calibrates
 
 ---
 
@@ -172,15 +258,22 @@ this wasn’t a prompt tweak — it was a representation upgrade.
 * automation by default
 * explainability always
 * workers gather truth, models reason
+* ontology > prompt tweaks
+* economics eventually > aesthetics
 
 ---
 
-## notes to reflect
+## reflection
 
 biggest improvements didn’t come from changing models.
 
-they came from understanding:
+they came from changing:
 
-> how intelligence systems should be built.
+* representation
+* ontology
+* system architecture
+* feedback loops
 
-good data → shared ontology → structured reasoning → deterministic decisions.
+> good data → shared ontology → structured reasoning → deterministic decisions → economic calibration
+
+that’s the path from mvp to real intelligence infra.
