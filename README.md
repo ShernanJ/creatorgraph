@@ -165,10 +165,10 @@ engagement_score = min(engagement_rate / target_rate, 1)
 
 ```
 compatibility_score =
-  0.35 × niche_score +
-  0.25 × topic_score +
-  0.20 × platform_score +
-  0.20 × engagement_score
+  0.45 × niche_score +
+  0.35 × topic_score +
+  0.10 × platform_score +
+  0.10 × engagement_score
 ```
 
 These weights are domain-informed priors and are designed to evolve into learned weights based on deal outcomes.
