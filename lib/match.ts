@@ -121,12 +121,12 @@ export function scoreMatch(brand: Brand, creator: Creator) {
   const bestPlatform = pickBestPlatform(brand.preferred_platforms ?? [], creator.platforms ?? []);
   const engagementScore = engagementScoreFor(creator, bestPlatform);
 
-  // README weights: 0.35 niche + 0.25 topics + 0.20 platform + 0.20 engagement
+  // README weights: 0.45 niche + 0.35 topics + 0.10 platform + 0.10 engagement
   const score =
-    nicheScore * 0.35 +
-    topicScore * 0.25 +
-    platformScore * 0.20 +
-    engagementScore * 0.20;
+    nicheScore * 0.45 +
+    topicScore * 0.35 +
+    platformScore * 0.10 +
+    engagementScore * 0.10;
 
   const reasons: string[] = [];
   if (nicheScore >= 0.8) reasons.push("category/niche match");
