@@ -28,7 +28,6 @@ function extractJson(s: string) {
 function normalizeUrl(input: string) {
   const s = input.trim();
   if (!s) return null;
-  // if user types "nike.com" → make it valid
   if (!/^https?:\/\//i.test(s)) return `https://${s}`;
   return s;
 }
@@ -38,12 +37,37 @@ function json400(error: string, extra?: any) {
   return NextResponse.json({ error, ...extra }, { status: 400 });
 }
 
+function buildBundleFromPages(pages: Array<{ url: string; title: string | null; text: string }>) {
+  // keep token budget sane
+  const perPageCap = 8000;
+  const maxPages = 6;
+
+  return pages.slice(0, maxPages).map((p, i) => {
+    const t = (p.text ?? "").slice(0, perPageCap);
+    return `PAGE ${i + 1}
+URL: ${p.url}
+TITLE: ${p.title ?? ""}
+TEXT:
+${t}`;
+  }).join("\n\n---\n\n");
+}
+
 export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
   if (!body) return json400("invalid json body");
 
+  // optional: allow analyze by existing brandId (crawl-first path)
+  const brandIdFromBody = body.brandId;
+  let existingBrand: any | null = null;
+
+  if (brandIdFromBody && typeof brandIdFromBody === "string") {
+    const [b] = await q<any>(`select * from brands where id=$1`, [brandIdFromBody]);
+    if (!b) return json400("brandId not found", { brandId: brandIdFromBody });
+    existingBrand = b;
+  }
+
   // accept both keys so UI can't drift
-  const raw = body.url ?? body.website ?? body.brandUrl;
+  const raw = body.url ?? body.website ?? body.brandUrl ?? existingBrand?.website;
   if (!raw || typeof raw !== "string") {
     return json400("missing url", { received: body });
   }
@@ -51,57 +75,76 @@ export async function POST(req: Request) {
   const url = normalizeUrl(raw);
   if (!url) return json400("empty url");
   try {
-    // validate URL early (catches "htp://" etc.)
     new URL(url);
   } catch {
     return json400("invalid url", { url });
   }
 
-  // fetch with timeout
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 12_000);
+  // 1) if we have a brandId, try to use crawled pages
+  let textForPrompt = "";
+  let used = "fetch";
 
-  let html = "";
-  try {
-    const res = await fetch(url, {
-      redirect: "follow",
-      signal: controller.signal,
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (compatible; CreatorGraphBot/1.0; +https://example.com)",
-        Accept: "text/html,application/xhtml+xml",
-      },
-    });
+  if (existingBrand) {
+    const pages = await q<any>(
+      `select url, title, text
+       from brand_pages
+       where brand_id=$1
+       order by fetched_at asc`,
+      [existingBrand.id]
+    );
 
-    if (!res.ok) {
-      clearTimeout(timeout);
-      return json400("failed to fetch url", {
-        url,
-        status: res.status,
-        statusText: res.statusText,
-      });
+    if (pages?.length) {
+      textForPrompt = buildBundleFromPages(pages);
+      used = "brand_pages";
     }
-
-    html = await res.text();
-  } catch (e: any) {
-    clearTimeout(timeout);
-    return json400("fetch threw error", {
-      url,
-      message: e?.message ?? String(e),
-      name: e?.name,
-      // AbortError helps you distinguish timeout from other failures
-    });
-  } finally {
-    clearTimeout(timeout);
   }
 
-  const text = stripHtml(html).slice(0, 12000);
+  // 2) fallback to direct fetch if no brand_pages bundle available
+  if (!textForPrompt) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 12_000);
 
-  const prompt = brandProfilePrompt(url, text);
+    let html = "";
+    try {
+      const res = await fetch(url, {
+        redirect: "follow",
+        signal: controller.signal,
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (compatible; CreatorGraphBot/1.0; +https://example.com)",
+          Accept: "text/html,application/xhtml+xml",
+        },
+      });
+
+      if (!res.ok) {
+        clearTimeout(timeout);
+        return json400("failed to fetch url", {
+          url,
+          status: res.status,
+          statusText: res.statusText,
+        });
+      }
+
+      html = await res.text();
+    } catch (e: any) {
+      clearTimeout(timeout);
+      return json400("fetch threw error", {
+        url,
+        message: e?.message ?? String(e),
+        name: e?.name,
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    textForPrompt = stripHtml(html).slice(0, 12000);
+  }
+
+  const prompt = brandProfilePrompt(url, textForPrompt);
   const rawOut = await groqText(prompt, {
     system: "return only valid json. no markdown. no extra text.",
     temperature: 0.1,
-    maxCompletionTokens: 600,
+    maxCompletionTokens: 700,
   });
 
   const json = extractJson(rawOut);
@@ -114,24 +157,64 @@ export async function POST(req: Request) {
     return json400("LLM returned invalid json", { raw: rawOut });
   }
 
-  const id = `br_${nanoid(10)}`;
+  // create or update brand
+  const brandId = existingBrand?.id ?? `br_${nanoid(10)}`;
 
-  await q(
-    `insert into brands (id, name, website, category, target_audience, goals, preferred_platforms, budget_range, campaign_angles, raw_summary)
-     values ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7::jsonb,$8,$9::jsonb,$10)`,
-    [
-      id,
-      profile.name ?? "unknown brand",
-      profile.website ?? url,
-      profile.category ?? null,
-      JSON.stringify(profile.target_audience ?? []),
-      JSON.stringify(profile.goals ?? []),
-      JSON.stringify(profile.preferred_platforms ?? []),
-      profile.budget_range ?? "2k-10k",
-      JSON.stringify(profile.campaign_angles ?? []),
-      profile.raw_summary ?? "",
-    ]
-  );
+  if (existingBrand) {
+    await q(
+      `update brands set
+        name=$2,
+        website=$3,
+        category=$4,
+        target_audience=$5::jsonb,
+        goals=$6::jsonb,
+        preferred_platforms=$7::jsonb,
+        budget_range=$8,
+        campaign_angles=$9::jsonb,
+        match_topics=$10::jsonb,
+        raw_summary=$11
+       where id=$1`,
+      [
+        brandId,
+        profile.name ?? existingBrand.name ?? "unknown brand",
+        profile.website ?? url,
+        profile.category ?? null,
+        JSON.stringify(profile.target_audience ?? []),
+        JSON.stringify(profile.goals ?? []),
+        JSON.stringify(profile.preferred_platforms ?? []),
+        profile.budget_range ?? existingBrand.budget_range ?? "2k-10k",
+        JSON.stringify(profile.campaign_angles ?? []),
+        JSON.stringify(profile.match_topics ?? []),
+        profile.raw_summary ?? "",
+      ]
+    );
+  } else {
+    await q(
+      `insert into brands (
+          id, name, website, category,
+          target_audience, goals, preferred_platforms,
+          budget_range, campaign_angles, match_topics, raw_summary
+       )
+       values (
+          $1,$2,$3,$4,
+          $5::jsonb,$6::jsonb,$7::jsonb,
+          $8,$9::jsonb,$10::jsonb,$11
+       )`,
+      [
+        brandId,
+        profile.name ?? "unknown brand",
+        profile.website ?? url,
+        profile.category ?? null,
+        JSON.stringify(profile.target_audience ?? []),
+        JSON.stringify(profile.goals ?? []),
+        JSON.stringify(profile.preferred_platforms ?? []),
+        profile.budget_range ?? "2k-10k",
+        JSON.stringify(profile.campaign_angles ?? []),
+        JSON.stringify(profile.match_topics ?? []),
+        profile.raw_summary ?? "",
+      ]
+    );
+  }
 
-  return NextResponse.json({ brandId: id, profile });
+  return NextResponse.json({ brandId, used, profile });
 }

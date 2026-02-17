@@ -47,3 +47,17 @@ create index if not exists idx_matches_creator on matches(creator_id);
 -- ✅ critical: prevent duplicates for same brand + creator
 create unique index if not exists uniq_matches_brand_creator
 on matches (brand_id, creator_id);
+
+
+create table if not exists brand_pages (
+  id text primary key,
+  brand_id text not null references brands(id) on delete cascade,
+  url text not null,
+  title text,
+  text text not null,
+  html_len int,
+  fetched_at timestamptz not null default now()
+);
+
+create index if not exists idx_brand_pages_brand on brand_pages(brand_id);
+create unique index if not exists uniq_brand_pages_brand_url on brand_pages(brand_id, url);
