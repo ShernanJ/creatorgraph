@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "seed": "tsx lib/seed.ts"
+    "seed": "tsx lib/seed.ts",
+    "generate-creators": "tsx lib/generateCreators.ts"
   },
   "dependencies": {
     "@types/pg": "^8.16.0",

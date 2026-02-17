@@ -1,0 +1,224 @@
+[
+  {
+    "id": "cr_001",
+    "name": "alex chen",
+    "niche": "b2b saas",
+    "platforms": ["linkedin", "x"],
+    "audience_types": ["founders", "operators", "product managers"],
+    "content_style": "storytelling + frameworks",
+    "products_sold": ["templates", "coaching"],
+    "sample_links": ["https://example.com/alex"],
+    "estimated_engagement": 0.048,
+    "metrics": {
+      "top_topics": ["b2b saas", "go-to-market", "product strategy", "founder ops"],
+      "post_frequency_per_week": 4,
+      "content_formats": ["threads", "carousels", "short posts"],
+      "platform_metrics": {
+        "linkedin": { "followers": 22000, "avg_views": 18000, "engagement_rate": 0.048 },
+        "x": { "followers": 12000, "avg_views": 9000, "engagement_rate": 0.032 }
+      }
+    }
+  },
+  {
+    "id": "cr_002",
+    "name": "mia rivera",
+    "niche": "skincare",
+    "platforms": ["instagram", "tiktok"],
+    "audience_types": ["women 18-34", "beauty shoppers"],
+    "content_style": "ugc demos + reviews",
+    "products_sold": ["affiliate links", "digital guide"],
+    "sample_links": ["https://example.com/mia"],
+    "estimated_engagement": 0.061,
+    "metrics": {
+      "top_topics": ["skincare", "beauty", "acne", "routine", "product reviews"],
+      "post_frequency_per_week": 5,
+      "content_formats": ["tiktok videos", "instagram reels", "instagram stories"],
+      "platform_metrics": {
+        "instagram": { "followers": 54000, "avg_views": 42000, "engagement_rate": 0.061 },
+        "tiktok": { "followers": 78000, "avg_views": 65000, "engagement_rate": 0.054 }
+      }
+    }
+  },
+  {
+    "id": "cr_003",
+    "name": "jordan price",
+    "niche": "fitness",
+    "platforms": ["tiktok", "instagram"],
+    "audience_types": ["gym beginners", "weight loss"],
+    "content_style": "before/after + routines",
+    "products_sold": ["programs", "supplements"],
+    "sample_links": ["https://example.com/jordan"],
+    "estimated_engagement": 0.055,
+    "metrics": {
+      "top_topics": ["fitness", "weight loss", "gym routines", "nutrition", "home workouts"],
+      "post_frequency_per_week": 6,
+      "content_formats": ["tiktok videos", "instagram reels", "before/after posts"],
+      "platform_metrics": {
+        "tiktok": { "followers": 130000, "avg_views": 90000, "engagement_rate": 0.055 },
+        "instagram": { "followers": 68000, "avg_views": 52000, "engagement_rate": 0.041 }
+      }
+    }
+  },
+  {
+    "id": "cr_004",
+    "name": "sara ng",
+    "niche": "personal finance",
+    "platforms": ["youtube", "x"],
+    "audience_types": ["young professionals", "students"],
+    "content_style": "educational breakdowns",
+    "products_sold": ["course", "newsletter"],
+    "sample_links": ["https://example.com/sara"],
+    "estimated_engagement": 0.043,
+    "metrics": {
+      "top_topics": ["personal finance", "investing", "budgeting", "credit cards", "saving"],
+      "post_frequency_per_week": 3,
+      "content_formats": ["youtube videos", "x threads", "explainers"],
+      "platform_metrics": {
+        "youtube": { "followers": 95000, "avg_views": 72000, "engagement_rate": 0.043 },
+        "x": { "followers": 26000, "avg_views": 14000, "engagement_rate": 0.028 }
+      }
+    }
+  },
+  [
+    {
+      "id": "cr_005",
+      "name": "daniel brooks",
+      "niche": "ai tools",
+      "platforms": ["x", "youtube"],
+      "audience_types": ["founders", "developers", "automation builders"],
+      "content_style": "tool breakdowns + workflows",
+      "products_sold": ["prompt packs", "automation templates"],
+      "sample_links": ["https://example.com/daniel"],
+      "estimated_engagement": 0.052,
+      "metrics": {
+        "top_topics": ["ai tools", "automation", "nocode", "productivity", "agents"],
+        "post_frequency_per_week": 4,
+        "content_formats": ["x threads", "youtube tutorials", "tool demos"],
+        "platform_metrics": {
+          "x": { "followers": 34000, "avg_views": 26000, "engagement_rate": 0.052 },
+          "youtube": { "followers": 61000, "avg_views": 48000, "engagement_rate": 0.046 }
+        }
+      }
+    },
+    {
+      "id": "cr_006",
+      "name": "lena morales",
+      "niche": "healthy cooking",
+      "platforms": ["instagram", "tiktok"],
+      "audience_types": ["busy professionals", "health conscious eaters"],
+      "content_style": "quick recipes + meal prep",
+      "products_sold": ["recipe ebook", "meal plans"],
+      "sample_links": ["https://example.com/lena"],
+      "estimated_engagement": 0.064,
+      "metrics": {
+        "top_topics": ["healthy recipes", "meal prep", "high protein meals", "budget meals"],
+        "post_frequency_per_week": 5,
+        "content_formats": ["reels", "tiktok videos", "step by step clips"],
+        "platform_metrics": {
+          "instagram": { "followers": 72000, "avg_views": 56000, "engagement_rate": 0.064 },
+          "tiktok": { "followers": 105000, "avg_views": 83000, "engagement_rate": 0.058 }
+        }
+      }
+    },
+    {
+      "id": "cr_007",
+      "name": "omar patel",
+      "niche": "real estate investing",
+      "platforms": ["youtube", "instagram"],
+      "audience_types": ["first time investors", "side hustlers"],
+      "content_style": "deal breakdowns + case studies",
+      "products_sold": ["course", "mentorship"],
+      "sample_links": ["https://example.com/omar"],
+      "estimated_engagement": 0.039,
+      "metrics": {
+        "top_topics": ["real estate investing", "cash flow", "house hacking", "market analysis"],
+        "post_frequency_per_week": 3,
+        "content_formats": ["youtube breakdowns", "reels", "property tours"],
+        "platform_metrics": {
+          "youtube": { "followers": 88000, "avg_views": 67000, "engagement_rate": 0.039 },
+          "instagram": { "followers": 42000, "avg_views": 29000, "engagement_rate": 0.031 }
+        }
+      }
+    },
+    {
+      "id": "cr_008",
+      "name": "hannah park",
+      "niche": "study productivity",
+      "platforms": ["youtube", "tiktok"],
+      "audience_types": ["students", "exam prep"],
+      "content_style": "study with me + systems",
+      "products_sold": ["notion templates", "planner"],
+      "sample_links": ["https://example.com/hannah"],
+      "estimated_engagement": 0.058,
+      "metrics": {
+        "top_topics": ["study routines", "focus techniques", "time blocking", "exam prep"],
+        "post_frequency_per_week": 4,
+        "content_formats": ["long study videos", "short tips", "timelapse sessions"],
+        "platform_metrics": {
+          "youtube": { "followers": 114000, "avg_views": 86000, "engagement_rate": 0.058 },
+          "tiktok": { "followers": 93000, "avg_views": 74000, "engagement_rate": 0.051 }
+        }
+      }
+    },
+    {
+      "id": "cr_009",
+      "name": "marcus reed",
+      "niche": "creator monetization",
+      "platforms": ["x", "linkedin"],
+      "audience_types": ["content creators", "solopreneurs"],
+      "content_style": "growth playbooks + revenue breakdowns",
+      "products_sold": ["coaching", "monetization toolkit"],
+      "sample_links": ["https://example.com/marcus"],
+      "estimated_engagement": 0.047,
+      "metrics": {
+        "top_topics": ["creator economy", "audience growth", "digital products", "funnels"],
+        "post_frequency_per_week": 5,
+        "content_formats": ["threads", "mini case studies", "short posts"],
+        "platform_metrics": {
+          "x": { "followers": 39000, "avg_views": 30000, "engagement_rate": 0.047 },
+          "linkedin": { "followers": 28000, "avg_views": 21000, "engagement_rate": 0.042 }
+        }
+      }
+    },
+    {
+      "id": "cr_010",
+      "name": "nina cole",
+      "niche": "mental wellness",
+      "platforms": ["instagram", "tiktok"],
+      "audience_types": ["young adults", "burnout recovery"],
+      "content_style": "relatable stories + coping tips",
+      "products_sold": ["journaling guide", "workshops"],
+      "sample_links": ["https://example.com/nina"],
+      "estimated_engagement": 0.067,
+      "metrics": {
+        "top_topics": ["mental health", "anxiety", "burnout", "self care routines"],
+        "post_frequency_per_week": 4,
+        "content_formats": ["reels", "tiktok talks", "carousel tips"],
+        "platform_metrics": {
+          "instagram": { "followers": 98000, "avg_views": 76000, "engagement_rate": 0.067 },
+          "tiktok": { "followers": 124000, "avg_views": 99000, "engagement_rate": 0.061 }
+        }
+      }
+    },
+    {
+      "id": "cr_011",
+      "name": "tyler wong",
+      "niche": "ecommerce growth",
+      "platforms": ["youtube", "x"],
+      "audience_types": ["store owners", "dropshippers"],
+      "content_style": "ad strategy + experiments",
+      "products_sold": ["course", "ad swipe files"],
+      "sample_links": ["https://example.com/tyler"],
+      "estimated_engagement": 0.041,
+      "metrics": {
+        "top_topics": ["facebook ads", "shopify growth", "conversion rate optimization", "funnels"],
+        "post_frequency_per_week": 3,
+        "content_formats": ["youtube tutorials", "x threads", "case studies"],
+        "platform_metrics": {
+          "youtube": { "followers": 76000, "avg_views": 59000, "engagement_rate": 0.041 },
+          "x": { "followers": 22000, "avg_views": 15000, "engagement_rate": 0.029 }
+        }
+      }
+    }
+  ]  
+]
