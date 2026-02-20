@@ -18,6 +18,19 @@ function asStringArray(v: any): string[] {
   return [];
 }
 
+function asObject(v: any): Record<string, unknown> {
+  if (v && typeof v === "object" && !Array.isArray(v)) return v as Record<string, unknown>;
+  if (typeof v === "string") {
+    try {
+      const parsed = JSON.parse(v);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {}
+  }
+  return {};
+}
+
 function uniqStrings(values: string[]) {
   const seen = new Set<string>();
   const out: string[] = [];
@@ -45,10 +58,121 @@ function parseRankingDirectives(raw: any) {
   };
 }
 
+type MatchCreatorSourceScope = "auto" | "stan_pipeline" | "all";
+
+type CreatorPoolSelection = {
+  creators: any[];
+  sourceTable: "creators" | "synthetic_creators";
+  sourceScope: MatchCreatorSourceScope;
+  persistedMatches: boolean;
+};
+
+async function selectCreatorPool(limit: number, sourceScope: MatchCreatorSourceScope): Promise<CreatorPoolSelection> {
+  const sourceScoped = sourceScope === "stan_pipeline";
+  const allCreators = sourceScope === "all";
+
+  if (sourceScoped) {
+    const scoped = await q<any>(
+      `select *
+       from creators
+       where source = 'stan_pipeline'
+       order by imported_at desc nulls last, created_at desc nulls last, id asc
+       limit $1`,
+      [limit]
+    );
+    return {
+      creators: scoped,
+      sourceTable: "creators",
+      sourceScope,
+      persistedMatches: true,
+    };
+  }
+
+  if (allCreators) {
+    const all = await q<any>(
+      `select *
+       from creators
+       order by imported_at desc nulls last, created_at desc nulls last, id asc
+       limit $1`,
+      [limit]
+    );
+    if (all.length) {
+      return {
+        creators: all,
+        sourceTable: "creators",
+        sourceScope,
+        persistedMatches: true,
+      };
+    }
+  } else {
+    // auto mode: prefer imported pipeline creators, then identity-backed creators, then all creators.
+    const pipeline = await q<any>(
+      `select *
+       from creators
+       where source = 'stan_pipeline'
+       order by imported_at desc nulls last, created_at desc nulls last, id asc
+       limit $1`,
+      [limit]
+    );
+    if (pipeline.length) {
+      return {
+        creators: pipeline,
+        sourceTable: "creators",
+        sourceScope,
+        persistedMatches: true,
+      };
+    }
+
+    const identityBacked = await q<any>(
+      `select *
+       from creators
+       where creator_identity_id is not null
+       order by imported_at desc nulls last, created_at desc nulls last, id asc
+       limit $1`,
+      [limit]
+    );
+    if (identityBacked.length) {
+      return {
+        creators: identityBacked,
+        sourceTable: "creators",
+        sourceScope,
+        persistedMatches: true,
+      };
+    }
+
+    const all = await q<any>(
+      `select *
+       from creators
+       order by imported_at desc nulls last, created_at desc nulls last, id asc
+       limit $1`,
+      [limit]
+    );
+    if (all.length) {
+      return {
+        creators: all,
+        sourceTable: "creators",
+        sourceScope,
+        persistedMatches: true,
+      };
+    }
+  }
+
+  const synthetic = await q<any>(`select * from synthetic_creators limit $1`, [limit]);
+  return {
+    creators: synthetic,
+    sourceTable: "synthetic_creators",
+    sourceScope,
+    persistedMatches: false,
+  };
+}
+
 export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
   const brandId = typeof body?.brandId === "string" ? body.brandId : "";
   const limit = typeof body?.limit === "number" && body.limit > 0 ? Math.min(500, body.limit) : 500;
+  const sourceScopeRaw = String(body?.creatorSource ?? "auto").trim().toLowerCase();
+  const sourceScope: MatchCreatorSourceScope =
+    sourceScopeRaw === "stan_pipeline" || sourceScopeRaw === "all" ? sourceScopeRaw : "auto";
   if (!brandId) {
     return NextResponse.json({ error: "missing brandId" }, { status: 400 });
   }
@@ -59,14 +183,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "brand not found" }, { status: 404 });
   }
 
-  let creators = await q<any>(`select * from creators limit $1`, [limit]);
-  let sourceTable: "creators" | "synthetic_creators" = "creators";
-  let persistedMatches = true;
-  if (!creators.length) {
-    creators = await q<any>(`select * from synthetic_creators limit $1`, [limit]);
-    sourceTable = "synthetic_creators";
-    persistedMatches = false;
-  }
+  const pool = await selectCreatorPool(limit, sourceScope);
+  const creators = pool.creators;
+  const sourceTable = pool.sourceTable;
+  const persistedMatches = pool.persistedMatches;
 
   const mergedPreferredPlatforms = uniqStrings([
     ...asStringArray(brand.preferred_platforms),
@@ -93,12 +213,12 @@ export async function POST(req: Request) {
         {
           id: c.id,
           niche: c.niche,
-          platforms: c.platforms ?? [],
-          audience_types: c.audience_types ?? [],
+          platforms: asStringArray(c.platforms),
+          audience_types: asStringArray(c.audience_types),
           content_style: c.content_style,
-          products_sold: c.products_sold ?? [],
+          products_sold: asStringArray(c.products_sold),
           estimated_engagement: c.estimated_engagement,
-          metrics: c.metrics ?? {},
+          metrics: asObject(c.metrics),
         } as any
       );
 
@@ -130,6 +250,8 @@ export async function POST(req: Request) {
     brandId,
     rankingDirectives,
     sourceTable,
+    creatorSource: sourceScope,
+    creatorPoolCount: creators.length,
     persistedMatches,
     ranked: ranked.map((r) => ({
       creator: r.creator,

@@ -21,11 +21,30 @@ function tokenJaccard(a: string, b: string) {
   return union > 0 ? inter / union : 0;
 }
 
+function uniq(values: string[]) {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of values) {
+    const value = normalize(raw);
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+    out.push(value);
+  }
+  return out;
+}
+
+function clamp01(x: number) {
+  if (!Number.isFinite(x)) return 0;
+  return Math.max(0, Math.min(1, x));
+}
+
 export function topicSimilarity(spec: MatchSpec, creator: Creator): ScoreResult {
-  const brandTopics = (spec.topics ?? []).map(normalize).filter(Boolean);
-  const creatorTopics = (creator.metrics?.top_topics ?? [])
-    .map(normalize)
-    .filter(Boolean);
+  const brandTopics = uniq(spec.topics ?? []);
+  const creatorTopics = uniq([
+    ...(creator.metrics?.top_topics ?? []),
+    ...(creator.metrics?.compatibility_signals?.match_topics ?? []),
+    ...(creator.metrics?.compatibility_signals?.intent_signals ?? []),
+  ]);
 
   if (brandTopics.length === 0 || creatorTopics.length === 0) {
     return { score: 0, confidence: 0.2, reasons: [] };
@@ -42,12 +61,18 @@ export function topicSimilarity(spec: MatchSpec, creator: Creator): ScoreResult 
   }
 
   const score = totalBest / brandTopics.length;
+  const compatibilityConfidence = clamp01(
+    Number(creator.metrics?.compatibility_signals?.confidence ?? 0)
+  );
   const coverage = Math.min(1, brandTopics.length / 4);
-  const confidence = Math.max(0.35, Math.min(0.95, 0.45 + coverage * 0.5));
+  const confidence = clamp01(
+    0.4 + coverage * 0.35 + Math.min(0.18, creatorTopics.length * 0.02) + 0.15 * compatibilityConfidence
+  );
 
   const reasons: string[] = [];
   if (score >= 0.35) reasons.push("topic overlap");
   if (score >= 0.65) reasons.push("strong topic alignment");
+  if (compatibilityConfidence >= 0.6 && score >= 0.4) reasons.push("topic evidence from creator signals");
 
   return { score, confidence, reasons };
 }

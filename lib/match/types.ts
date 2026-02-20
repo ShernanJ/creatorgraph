@@ -22,11 +22,41 @@ export type PlatformMetric = {
   followers?: number;
   avg_views?: number;
   engagement_rate?: number;
+  confidence?: number;
+  sample_size?: number;
+  source?: string;
+};
+
+export type CompatibilitySignals = {
+  niche_confidence?: number;
+  buying_intent_score?: number;
+  selling_style?: string;
+  intent_signals?: string[];
+  audience_signals?: string[];
+  match_topics?: string[];
+  primary_platform?: string | null;
+  confidence?: number;
+  evidence?: Record<string, unknown>;
 };
 
 export type CreatorMetrics = {
   top_topics?: string[];
   platform_metrics?: Record<string, PlatformMetric>;
+  compatibility_signals?: CompatibilitySignals;
+  social_performance?: {
+    avg_confidence?: number;
+    platforms?: number;
+    primary_platform?: string | null;
+  };
+  import_meta?: {
+    source?: string;
+    creator_identity_id?: string;
+    canonical_stan_slug?: string | null;
+    extracted_confidence?: number | null;
+    social_avg_confidence?: number | null;
+    compatibility_confidence?: number | null;
+    imported_at?: string;
+  };
 };
 
 export type Creator = {

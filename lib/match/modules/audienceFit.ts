@@ -19,9 +19,29 @@ function tokenOverlap(a: string, b: string) {
   return inter / Math.max(1, Math.min(aa.size, bb.size));
 }
 
+function uniq(values: string[]) {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of values) {
+    const value = normalize(raw);
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+    out.push(value);
+  }
+  return out;
+}
+
+function clamp01(x: number) {
+  if (!Number.isFinite(x)) return 0;
+  return Math.max(0, Math.min(1, x));
+}
+
 export function audienceFit(spec: MatchSpec, creator: Creator): ScoreResult {
-  const brandAudiences = (spec.audiences ?? []).map(normalize).filter(Boolean);
-  const creatorAudiences = (creator.audience_types ?? []).map(normalize).filter(Boolean);
+  const brandAudiences = uniq(spec.audiences ?? []);
+  const creatorAudiences = uniq([
+    ...(creator.audience_types ?? []),
+    ...(creator.metrics?.compatibility_signals?.audience_signals ?? []),
+  ]);
 
   if (brandAudiences.length === 0 || creatorAudiences.length === 0) {
     return { score: 0, confidence: 0.2, reasons: [] };
@@ -38,13 +58,22 @@ export function audienceFit(spec: MatchSpec, creator: Creator): ScoreResult {
   }
 
   const score = totalBest / brandAudiences.length;
+  const compatibilityConfidence = clamp01(
+    Number(creator.metrics?.compatibility_signals?.confidence ?? 0)
+  );
+  const buyingIntentScore = clamp01(
+    Number(creator.metrics?.compatibility_signals?.buying_intent_score ?? 0)
+  );
   const reasons: string[] = [];
   if (score >= 0.3) reasons.push("audience fit");
   if (score >= 0.65) reasons.push("strong audience overlap");
+  if (buyingIntentScore >= 0.55 && score >= 0.3) reasons.push("audience has conversion intent");
 
   return {
     score,
-    confidence: Math.min(0.9, 0.45 + 0.1 * brandAudiences.length),
+    confidence: clamp01(
+      0.45 + 0.08 * Math.min(4, brandAudiences.length) + 0.15 * compatibilityConfidence
+    ),
     reasons,
   };
 }

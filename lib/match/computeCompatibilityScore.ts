@@ -57,33 +57,145 @@ function phraseSimilarity(a: string, b: string) {
   return overlap / denom;
 }
 
-/**
- * Build a MatchSpec from the Brand record.
- * v1: intent/spec are simple defaults; next step we infer intent + specificity properly.
- */
-function buildMatchSpec(brand: Brand): MatchSpec {
-  const topics =
-    brand.match_topics?.length ? brand.match_topics : (brand.campaign_angles ?? brand.goals ?? []);
-  const priorityNiches = uniqPhrases(brand.priority_niches ?? []);
-  const priorityTopics = uniqPhrases(brand.priority_topics ?? []);
+function intentKeywordScore(texts: string[], keywords: string[]) {
+  if (!texts.length || !keywords.length) return 0;
+  let hits = 0;
+  for (const text of texts) {
+    const normalizedText = normalizePhrase(text);
+    for (const keyword of keywords) {
+      const normalizedKeyword = normalizePhrase(keyword);
+      if (!normalizedKeyword) continue;
+      if (normalizedText.includes(normalizedKeyword)) hits += 1;
+    }
+  }
+  return hits;
+}
 
-  return {
-    intent: {
-      // v1 default: behave like "product_sale" until you add intent inference
+function inferIntentVector(brand: Brand) {
+  const texts = uniqPhrases([
+    ...(brand.goals ?? []),
+    ...(brand.campaign_angles ?? []),
+    ...(brand.match_topics ?? []),
+  ]);
+
+  if (!texts.length) {
+    return {
       product_sale: 1,
       creator_enablement: 0,
       b2b_leadgen: 0,
       community: 0,
-    },
+    };
+  }
+
+  const raw = {
+    product_sale:
+      1 +
+      intentKeywordScore(texts, [
+        "sales",
+        "conversion",
+        "purchase",
+        "revenue",
+        "cpm",
+        "affiliate",
+        "checkout",
+        "direct response",
+      ]),
+    creator_enablement:
+      intentKeywordScore(texts, [
+        "ugc",
+        "creator content",
+        "content production",
+        "awareness",
+        "brand awareness",
+        "creative testing",
+      ]),
+    b2b_leadgen:
+      intentKeywordScore(texts, [
+        "lead",
+        "demo",
+        "trial",
+        "book call",
+        "pipeline",
+        "appointment",
+        "saas",
+        "b2b",
+      ]),
+    community:
+      intentKeywordScore(texts, [
+        "community",
+        "newsletter",
+        "membership",
+        "retention",
+        "subscriber",
+        "discord",
+      ]),
+  };
+
+  const total = Object.values(raw).reduce((sum, value) => sum + value, 0);
+  if (total <= 0) {
+    return {
+      product_sale: 1,
+      creator_enablement: 0,
+      b2b_leadgen: 0,
+      community: 0,
+    };
+  }
+
+  return {
+    product_sale: raw.product_sale / total,
+    creator_enablement: raw.creator_enablement / total,
+    b2b_leadgen: raw.b2b_leadgen / total,
+    community: raw.community / total,
+  };
+}
+
+function estimateEvidenceConfidence(brand: Brand) {
+  const signals = [
+    (brand.match_topics ?? []).length > 0,
+    (brand.campaign_angles ?? []).length > 0,
+    (brand.goals ?? []).length > 0,
+    (brand.target_audience ?? []).length > 0,
+    (brand.preferred_platforms ?? []).length > 0,
+    Boolean(brand.category),
+  ].filter(Boolean).length;
+  return clamp01(0.35 + signals * 0.1);
+}
+
+function estimateSpecificity(brand: Brand) {
+  const breadth =
+    (brand.match_topics ?? []).length +
+    (brand.campaign_angles ?? []).length +
+    (brand.goals ?? []).length +
+    (brand.target_audience ?? []).length;
+  if (breadth <= 1) return 0.2;
+  if (breadth <= 4) return 0.5;
+  if (breadth <= 8) return 0.68;
+  return 0.82;
+}
+
+/**
+ * Build a MatchSpec from the Brand record.
+ */
+function buildMatchSpec(brand: Brand): MatchSpec {
+  const topics = uniqPhrases([
+    ...(brand.match_topics ?? []),
+    ...(brand.campaign_angles ?? []),
+    ...(brand.goals ?? []),
+  ]);
+  const priorityNiches = uniqPhrases(brand.priority_niches ?? []);
+  const priorityTopics = uniqPhrases(brand.priority_topics ?? []);
+
+  return {
+    intent: inferIntentVector(brand),
     category: brand.category ?? null,
     topics,
-    audiences: brand.target_audience ?? [],
-    outcomes: brand.goals ?? [],
-    platforms: brand.preferred_platforms ?? [],
+    audiences: uniqPhrases(brand.target_audience ?? []),
+    outcomes: uniqPhrases(brand.goals ?? []),
+    platforms: uniqPhrases(brand.preferred_platforms ?? []),
     priorityNiches,
     priorityTopics,
-    evidence_confidence: 0.7,
-    specificity: 0.5,
+    evidence_confidence: estimateEvidenceConfidence(brand),
+    specificity: estimateSpecificity(brand),
   };
 }
 
@@ -136,6 +248,11 @@ function computePriorityBoost(spec: MatchSpec, creator: Creator) {
   const creatorSignals = uniqPhrases([
     creator.niche ?? "",
     ...(creator.metrics?.top_topics ?? []).map((topic) => String(topic)),
+    ...(creator.metrics?.compatibility_signals?.match_topics ?? []).map((topic) => String(topic)),
+    ...(creator.metrics?.compatibility_signals?.intent_signals ?? []).map((topic) => String(topic)),
+    ...(creator.metrics?.compatibility_signals?.audience_signals ?? []).map((topic) =>
+      String(topic)
+    ),
   ]);
   if (!creatorSignals.length) {
     return { boost: 0, reason: null as string | null, matchedPriorities: [] as string[] };
@@ -225,7 +342,10 @@ export function computeCompatibilityScore(args: {
       baseWeights,
       // useful in debug views later:
       brandTopicsCount: spec.topics.length,
-      creatorTopicsCount: (args.creator.metrics?.top_topics ?? []).length,
+      creatorTopicsCount:
+        (args.creator.metrics?.top_topics ?? []).length +
+        (args.creator.metrics?.compatibility_signals?.match_topics ?? []).length +
+        (args.creator.metrics?.compatibility_signals?.intent_signals ?? []).length,
       priorityBoost: Number(priorityBoost.boost.toFixed(4)),
       priorityMatches: priorityBoost.matchedPriorities,
     },
