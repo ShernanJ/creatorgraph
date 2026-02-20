@@ -81,7 +81,21 @@ Outreach + Deal Lifecycle Tracking
 ## Stage 2 — Creator Discovery Ingestion
 
 - `raw_accounts` table in `lib/schema.sql`
+- `POST /api/creator-discovery/crawl` (Playwright Google SERP crawler preview + optional persist)
+- Crawl endpoint supports:
+  - `engine=auto|google|duckduckgo|serpapi`
+  - `auto` prefers `serpapi` when `SERP_API_KEY` is set
+  - `browser=playwright|patchright` (`CREATOR_DISCOVERY_BROWSER` env default)
+  - `platforms=["instagram"]` style platform targeting
+  - `maxResultsPerPlatform` + optional `platformLimits` for per-platform caps
+  - `queryDelayMsMin/queryDelayMsMax` for slow-run scheduling
+  - one-shot persist + extraction when `persist=true` (set `extractAfterPersist=true`)
+  - extraction controls: `extractorVersion`, `extractLimit`, `extractPreviewLimit`
 - `POST /api/creator-discovery`
+- `POST /api/creator-discovery/extract`
+  - `dryRun=true` by default for parser iteration
+  - platform/run-scoped extraction snapshots into `raw_account_extractions`
+  - sample mode: pass `samples[]` to extract directly from raw snippets without DB writes
 - Ingest + normalize SERP rows:
   - `platform`
   - `handle`
@@ -126,7 +140,17 @@ Known limitation:
 - `POST /api/creator-import`
 - Imports resolved + enriched creator identities into canonical `creators`
 - Uses `creator_identity_id` traceability and `source='stan_pipeline'`
+- Import now runs deterministic compatibility signal extraction:
+  - `niche` + `niche_confidence`
+  - `top_topics` + `audience_types`
+  - `products_sold`
+  - `selling_style` + `buying_intent_score`
+  - `primary_platform`
+  - signal evidence + confidence in `creators.metrics.compatibility_signals`
 - Keeps synthetic seed data isolated in `synthetic_creators`
+- `POST /api/creator-social/enrich`
+- Persists per-platform social performance priors in `creator_social_profiles`
+- Syncs `creators.metrics.platform_metrics` + `estimated_engagement` with confidence metadata
 
 ## Brand Ingestion Fallback Chain
 
@@ -150,6 +174,10 @@ raw_accounts (Stage 2)
 creator_identities + creator_identity_accounts (Stage 3)
     ↓
 creator_stan_profiles (Stage 4)
+    ↓
+creator_social_profiles (Stage 5)
+    ↓
+creators (canonical import, Stage 5)
     ↓
 compatibility scoring (Stage 1)
 ```
@@ -193,10 +221,13 @@ It includes:
 - `POST /api/crawl-brand`
 - `POST /api/match-creators`
 - `POST /api/generate-outreach`
+- `POST /api/creator-discovery/crawl`
 - `POST /api/creator-discovery`
+- `POST /api/creator-discovery/extract`
 - `GET /api/creator-discovery?discoveryRunId=...`
 - `POST /api/creator-identity/resolve`
 - `POST /api/creator-stan/enrich`
+- `POST /api/creator-social/enrich`
 - `POST /api/creator-import`
 
 ---
@@ -209,10 +240,12 @@ It includes:
 - `synthetic_creators`
 - `matches`
 - `raw_accounts`
+- `raw_account_extractions`
 - `creator_identities`
 - `creator_identity_accounts`
 - `identity_merge_candidates`
 - `creator_stan_profiles`
+- `creator_social_profiles`
 
 ---
 
@@ -227,6 +260,9 @@ It includes:
   - `GROQ_API_KEY`
   - `GROQ_MODEL` (optional)
   - `NEXT_PUBLIC_SITE_URL`
+  - `SERP_API_KEY` (optional; enables `engine=serpapi` and auto-prefers SerpAPI)
+  - `CREATOR_DISCOVERY_ENGINE` (optional: `auto|google|duckduckgo|serpapi`)
+  - `CREATOR_DISCOVERY_BROWSER` (optional: `playwright` or `patchright`)
 
 ## Commands
 
@@ -249,10 +285,10 @@ npm run match:fixtures
 
 # Roadmap (Next Stages)
 
-- Stage 5: Social metrics enrichment (recent-post sampling)
-- Stage 6: Creator ontology classification
-- Stage 7: Compatibility engine v2 on normalized feature store
-- Stage 8: Intelligence dashboard and analytics views
+- Stage 6: High-fidelity social metrics sampling (recent-post crawl)
+- Stage 7: Creator ontology classification
+- Stage 8: Compatibility engine v2 on normalized feature store
+- Stage 9: Intelligence dashboard and analytics views
 
 ---
 
