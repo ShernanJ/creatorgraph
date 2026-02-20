@@ -121,6 +121,13 @@ Outreach + Deal Lifecycle Tracking
 Known limitation:
 - baseline HTML extraction can be sparse for JS-heavy Stan pages.
 
+## Stage 5 — Real Creator Import (Baseline)
+
+- `POST /api/creator-import`
+- Imports resolved + enriched creator identities into canonical `creators`
+- Uses `creator_identity_id` traceability and `source='stan_pipeline'`
+- Keeps synthetic seed data isolated in `synthetic_creators`
+
 ## Brand Ingestion Fallback Chain
 
 When `POST /api/analyze-brand` cannot parse enough content via a normal fetch, it now escalates through agent fallbacks:
@@ -190,6 +197,7 @@ It includes:
 - `GET /api/creator-discovery?discoveryRunId=...`
 - `POST /api/creator-identity/resolve`
 - `POST /api/creator-stan/enrich`
+- `POST /api/creator-import`
 
 ---
 
@@ -198,6 +206,7 @@ It includes:
 - `brands`
 - `brand_pages`
 - `creators`
+- `synthetic_creators`
 - `matches`
 - `raw_accounts`
 - `creator_identities`
@@ -230,6 +239,8 @@ Useful:
 
 ```bash
 npm run seed
+npm run move:synthetic-creators
+npm run seed:real
 npm run generate-creators
 npm run match:fixtures
 ```
