@@ -347,3 +347,167 @@ they came from changing:
 > good data → shared ontology → structured reasoning → deterministic decisions → economic calibration
 
 that’s the path from mvp to real intelligence infra.
+
+---
+
+# post stan event
+
+### updates
+
+i posted what i had so far on linkedin and demo'd to a few people - but i intriuged engineers at stan with this and therefore i wanted to improve it by looking into actually scraping **real stan.store creators** so thats why im going to focus on here.
+
+---
+
+
+
+## phase 8 — matcher hardening (guardrails before expansion)
+
+### what changed
+
+before scaling discovery, i stabilized scoring infra:
+
+* refactored matching into modular components (`lib/match/*`)
+* locked a module contract:
+
+  * `score`
+  * `confidence`
+  * `reasons`
+* added deterministic fixture tests for ranking sanity
+* fixed type-safety issues in `computeCompatibilityScore` so refactors stop breaking compile
+
+### why this mattered
+
+this reduced fear while iterating.
+
+i can now change scoring logic fast and still know if i broke obvious match behavior.
+
+it turned matching from "fragile script logic" into "maintainable scoring infra."
+
+### realization
+
+> before scaling data pipelines, stabilize your decision engine
+
+---
+
+## phase 9 — creator discovery ingestion layer (serp → structured rows)
+
+### what changed
+
+instead of jumping straight into full crawler complexity, i built ingestion first:
+
+* added `raw_accounts` table
+* added `/api/creator-discovery`
+* ingest payload now stores:
+
+  * query context
+  * source url
+  * normalized profile url
+  * platform
+  * handle
+  * `stan_slug`
+  * follower estimate
+
+* added run-level coverage report:
+
+  * total rows
+  * by-platform distribution
+  * `stan_slug` coverage %
+
+### why this mattered
+
+this locked the data contract before scraper complexity.
+
+i now know exactly what "good discovery output" should look like.
+
+### realization
+
+> ingestion schema first, fetch logic second
+
+---
+
+## phase 10 — identity graph layer (merge before enrichment)
+
+### what changed
+
+discovered accounts are not creators yet.
+
+so i added identity resolution:
+
+* canonical identities table (`creator_identities`)
+* account linkage table (`creator_identity_accounts`)
+* unresolved queue (`identity_merge_candidates`)
+
+merge priority:
+
+1. same `stan_slug`
+2. same personal domain
+3. explicit cross-link evidence
+4. else queue candidate
+
+### why this mattered
+
+this prevents duplicate creators and bad merges.
+
+it creates a real graph:
+
+many discovered accounts → one canonical creator identity.
+
+### realization
+
+> without identity resolution, enrichment and matching are built on duplicates
+
+---
+
+## phase 11 — stan hub enrichment baseline (monetization signals start)
+
+### what changed
+
+once identity has `canonical_stan_slug`, enrich from `stan.store/<slug>`:
+
+* added `creator_stan_profiles`
+* added `/api/creator-stan/enrich`
+* extraction now stores:
+
+  * offers
+  * pricing points
+  * product types
+  * outbound socials
+  * email
+  * cta style
+  * extraction confidence
+
+### what i observed
+
+for some pages, extraction returns sparse output (empty offers/pricing, low confidence).
+
+likely reasons:
+
+* js-rendered pages
+* thin html on basic fetch
+* anti-bot / redirect behavior
+
+### why this still mattered
+
+even baseline enrichment proved the pipeline works end-to-end:
+
+serp account → canonical identity → stan enrichment row.
+
+this is huge because the architecture is now layered and composable.
+
+### realization
+
+> missing signals are a crawler-depth problem, not an architecture problem
+
+---
+
+## current stage-by-stage memory hook
+
+1. find accounts (`raw_accounts`)
+2. decide who is who (`creator_identities`)
+3. learn how they monetize (`creator_stan_profiles`)
+4. later: enrich performance + ontology
+5. then: score compatibility with stronger signals
+
+short version:
+
+> discover → resolve identity → enrich monetization → score with confidence
