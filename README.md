@@ -6,7 +6,7 @@ It transforms brand onboarding, campaign creation, creator matching, and outreac
 
 ---
 
-# 🚀 Core Thesis
+# Core Thesis
 
 Most creator platforms focus on storefronts, link-in-bio monetization, and inbound discovery.
 
@@ -16,241 +16,215 @@ CreatorGraph focuses on the missing side:
 
 Instead of:
 
-* Creators manually searching for deals
-* Brands manually browsing creators
-* Cold outbound guessing
+- Creators manually searching for deals
+- Brands manually browsing creators
+- Cold outbound guessing
 
 CreatorGraph:
 
-* Structures brand intent
-* Structures creator performance signals
-* Computes compatibility deterministically
-* Orchestrates deal flow automatically
+- Structures brand intent
+- Structures creator signals
+- Computes compatibility deterministically
+- Orchestrates deal flow automatically
 
 The result is reduced friction, higher match quality, and scalable revenue generation.
 
 ---
 
-# 🔁 Platform Model
+# Platform Model
 
-CreatorGraph is not internal tooling.
-It is a platform layer embedded within the creator ecosystem.
+CreatorGraph is a platform layer embedded within the creator ecosystem.
 
 ## Brand Experience
 
 1. Brand pastes website URL
-2. AI agents crawl and build structured brand dossier
-3. Campaign briefs auto-generated
-4. High-fit creators ranked
-5. Outreach auto-generated (optional auto-send)
-
-Brands can operate in:
-
-• **Auto Mode** — fully automated campaign launch
-• **Review Mode** — approve matches and outreach
-• **Manual Mode** — custom selection and messaging
-
----
+2. AI crawl + analysis builds structured brand dossier
+3. High-fit creators are ranked
+4. Outreach is generated with campaign context
 
 ## Creator Experience
 
-Creators do not search for gigs.
-
-They receive:
-
-* Ranked inbound deal opportunities
-* Pre-qualified campaign briefs
-* One-click accept/decline
-
-Deals feel native inside the platform.
+Creators receive ranked inbound opportunities rather than searching manually.
 
 ---
 
-# 🧠 System Architecture
+# System Architecture (Vision)
 
-```
+```text
 Brand URL
    ↓
 Playwright Crawl Agent
    ↓
 Structured Brand Dossier
    ↓
-Brand Profiler (LLM)
+Creator Discovery + Identity Resolution
    ↓
-Postgres Knowledge Graph
+Creator Enrichment Layers
    ↓
 Compatibility Scoring Engine
    ↓
-Ranked Creator Matches
+Ranked Matches
    ↓
-Outreach Agent
-   ↓
-Deal Lifecycle Tracking
+Outreach + Deal Lifecycle Tracking
 ```
 
 ---
 
-# 📊 Creator Data Model
+# Current Build Status (Implemented)
 
-CreatorGraph prioritizes measurable performance signals over subjective labels.
+## Stage 1 — Matching Engine Hardening
 
-Creators are modeled using:
+- Modular scoring in `lib/match/*`
+- Confidence-aware weighting + explainable reasons
+- Deterministic fixture checks via `npm run match:fixtures`
 
-* niche_primary
-* platforms
-* followers per platform
-* average views per platform
-* engagement rate
-* content formats
-* top topics
-* post frequency
+## Stage 2 — Creator Discovery Ingestion
 
-This allows deterministic ranking and future ML optimization.
+- `raw_accounts` table in `lib/schema.sql`
+- `POST /api/creator-discovery`
+- Ingest + normalize SERP rows:
+  - `platform`
+  - `handle`
+  - `normalized_profile_url`
+  - `stan_slug`
+  - `follower_count_estimate`
+- Run-level report:
+  - total
+  - by-platform distribution
+  - `stanSlugCoveragePct`
 
----
+## Stage 3 — Identity Resolution
 
-# 🔥 Engagement Rate
+- `creator_identities`
+- `creator_identity_accounts`
+- `identity_merge_candidates`
+- `POST /api/creator-identity/resolve`
+- Deterministic merge priority:
+  1. `stan_slug`
+  2. personal domain
+  3. explicit cross-link evidence
+  4. otherwise candidate queue
 
-Preferred calculation:
+## Stage 4 — Stan Hub Enrichment (Baseline)
 
-```
-engagement_rate = (avg_likes + avg_comments) / avg_views
-```
+- `creator_stan_profiles`
+- `POST /api/creator-stan/enrich`
+- Extracted signals:
+  - offers
+  - pricing points
+  - product types
+  - outbound socials
+  - email
+  - CTA style
+  - extraction confidence
 
-MVP approximation:
-
-```
-engagement_rate ≈ avg_views / followers
-```
-
-Engagement is normalized to compare creators across audience sizes.
-
----
-
-# 🎯 Compatibility Scoring Model
-
-Each brand–creator pair receives a normalized score between `0 → 1`.
-
-## Signals
-
-### 1️⃣ Niche Alignment
-
-```
-niche_score = 1 if creator.niche_primary == brand.category else 0
-```
-
-### 2️⃣ Topic Overlap
-
-```
-topic_score = |intersection(creator.top_topics, brand.campaign_angles)|
-              / |brand.campaign_angles|
-```
-
-### 3️⃣ Platform Fit
-
-```
-platform_score = |intersection(creator.platforms, brand.preferred_platforms)|
-                 / |brand.preferred_platforms|
-```
-
-### 4️⃣ Engagement Strength
-
-```
-engagement_score = min(engagement_rate / target_rate, 1)
-```
+Known limitation:
+- baseline HTML extraction can be sparse for JS-heavy Stan pages.
 
 ---
 
-# 🧮 Final Compatibility Formula
+# End-to-End Data Flow (Current)
 
+```text
+SERP Query Results
+    ↓
+raw_accounts (Stage 2)
+    ↓
+creator_identities + creator_identity_accounts (Stage 3)
+    ↓
+creator_stan_profiles (Stage 4)
+    ↓
+compatibility scoring (Stage 1)
 ```
-compatibility_score =
-  0.45 × niche_score +
-  0.35 × topic_score +
-  0.10 × platform_score +
-  0.10 × engagement_score
+
+---
+
+# Compatibility Scoring Model (Current)
+
+Each brand-creator pair receives a normalized score between `0` and `1`.
+
+Current module family:
+
+- `nicheAffinity`
+- `topicSimilarity`
+- `platformAlignment`
+- `engagementFit`
+- `audienceFit`
+
+Scoring is deterministic and explainable with module-level reasons and confidence.
+
+---
+
+# API Surface (Current)
+
+- `POST /api/preview-url`
+- `POST /api/analyze-brand`
+- `POST /api/crawl-brand`
+- `POST /api/match-creators`
+- `POST /api/generate-outreach`
+- `POST /api/creator-discovery`
+- `GET /api/creator-discovery?discoveryRunId=...`
+- `POST /api/creator-identity/resolve`
+- `POST /api/creator-stan/enrich`
+
+---
+
+# Core Tables (Current)
+
+- `brands`
+- `brand_pages`
+- `creators`
+- `matches`
+- `raw_accounts`
+- `creator_identities`
+- `creator_identity_accounts`
+- `identity_merge_candidates`
+- `creator_stan_profiles`
+
+---
+
+# Local Development
+
+## Prerequisites
+
+- Node.js
+- Postgres
+- `.env.local` with:
+  - `DATABASE_URL`
+  - `GROQ_API_KEY`
+  - `GROQ_MODEL` (optional)
+  - `NEXT_PUBLIC_SITE_URL`
+
+## Commands
+
+```bash
+npm install
+npm run dev
 ```
 
-These weights are domain-informed priors and are designed to evolve into learned weights based on deal outcomes.
+Useful:
+
+```bash
+npm run seed
+npm run generate-creators
+npm run match:fixtures
+```
 
 ---
 
-# 🤖 AI Agent Layers
+# Roadmap (Next Stages)
 
-## Brand Crawl Agent
-
-Uses Playwright to:
-
-* Extract pricing
-* Extract positioning
-* Identify ICP
-* Detect social presence
-* Capture testimonials and case studies
-
-Improves data quality for campaign generation.
-
-## Campaign Planner Agent
-
-Generates:
-
-* Campaign angles
-* Hook ideas
-* Deliverables
-* Suggested CTAs
-* Measurement plan
-
-## Outreach Agent
-
-Generates personalized messages grounded in:
-
-* Brand dossier
-* Creator signals
-* Campaign brief
+- Stage 5: Social metrics enrichment (recent-post sampling)
+- Stage 6: Creator ontology classification
+- Stage 7: Compatibility engine v2 on normalized feature store
+- Stage 8: Intelligence dashboard and analytics views
 
 ---
 
-# 📈 Outcome Feedback Loop
+# Design Principles
 
-Match lifecycle states:
-
-* suggested
-* contacted
-* replied
-* interested
-* closed
-
-Outcome data enables:
-
-* Weight optimization
-* Conversion prediction
-* Future learning-to-rank models
-
----
-
-# 🎯 Design Principles
-
-* Measurable over inferred
-* Deterministic first, ML later
-* Explainable scoring
-* Automation by default, override optional
-* Agent-enhanced data quality
-
----
-
-# 🚀 Future Roadmap
-
-* Creator enrichment agents
-* Conversion prediction modeling
-* Learning-to-rank optimization
-* Multi-creator campaign optimization
-* Full autonomous deal routing
-
----
-
-# 📍 Vision
-
-CreatorGraph transforms creator ecosystems from monetization tools into revenue intelligence networks.
-
-It bridges demand and supply using structured signals, automation, and agentic data acquisition — while preserving human control.
-
-The result is scalable creator–brand commerce with reduced friction and higher conversion probability.
+- Measurable over inferred
+- Deterministic first, ML later
+- Explainability always
+- Automation by default
+- Shared ontology over prompt hacks
