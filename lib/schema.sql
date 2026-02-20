@@ -138,3 +138,29 @@ create index if not exists idx_identity_merge_candidates_run
 on identity_merge_candidates(discovery_run_id);
 create index if not exists idx_identity_merge_candidates_status
 on identity_merge_candidates(status);
+
+-- stage 4: stan hub enrichment
+create table if not exists creator_stan_profiles (
+  id text primary key,
+  creator_identity_id text not null references creator_identities(id) on delete cascade,
+  stan_slug text not null,
+  stan_url text not null,
+  bio_description text,
+  offers jsonb not null default '[]'::jsonb,
+  pricing_points jsonb not null default '[]'::jsonb,
+  product_types jsonb not null default '[]'::jsonb,
+  outbound_socials jsonb not null default '[]'::jsonb,
+  email text,
+  cta_style text,
+  source_text text,
+  source_html_len int,
+  extracted_confidence numeric not null default 0.5,
+  enriched_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique(creator_identity_id)
+);
+
+create index if not exists idx_creator_stan_profiles_identity
+on creator_stan_profiles(creator_identity_id);
+create index if not exists idx_creator_stan_profiles_slug
+on creator_stan_profiles(stan_slug);
