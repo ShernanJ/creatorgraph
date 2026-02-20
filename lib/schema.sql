@@ -61,3 +61,27 @@ create table if not exists brand_pages (
 
 create index if not exists idx_brand_pages_brand on brand_pages(brand_id);
 create unique index if not exists uniq_brand_pages_brand_url on brand_pages(brand_id, url);
+
+-- stage 2: creator discovery (SERP ingestion)
+create table if not exists raw_accounts (
+  id text primary key,
+  discovery_run_id text not null,
+  query text not null,
+  position int,
+  title text,
+  snippet text,
+  source_url text not null,
+  normalized_profile_url text,
+  platform text,
+  handle text,
+  stan_slug text,
+  follower_count_estimate int,
+  raw jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_raw_accounts_run on raw_accounts(discovery_run_id);
+create index if not exists idx_raw_accounts_platform on raw_accounts(platform);
+create index if not exists idx_raw_accounts_stan_slug on raw_accounts(stan_slug);
+create unique index if not exists uniq_raw_accounts_run_query_url
+on raw_accounts(discovery_run_id, query, source_url);
