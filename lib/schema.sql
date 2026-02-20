@@ -12,6 +12,25 @@ create table if not exists creators (
   metrics jsonb not null default '{}'::jsonb
 );
 
+-- synthetic/demo creators (seed fixtures only)
+create table if not exists synthetic_creators (
+  id text primary key,
+  name text not null,
+  niche text not null,
+  platforms jsonb not null default '[]'::jsonb,
+  audience_types jsonb not null default '[]'::jsonb,
+  content_style text,
+  products_sold jsonb not null default '[]'::jsonb,
+  sample_links jsonb not null default '[]'::jsonb,
+  estimated_engagement numeric,
+  metrics jsonb not null default '{}'::jsonb,
+  seed_source text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_synthetic_creators_niche on synthetic_creators(niche);
+
 -- brands
 create table if not exists brands (
   id text primary key,
@@ -98,6 +117,33 @@ create table if not exists creator_identities (
 
 create index if not exists idx_creator_identities_stan on creator_identities(canonical_stan_slug);
 create index if not exists idx_creator_identities_domain on creator_identities(canonical_personal_domain);
+
+-- real creator import metadata (stage 5+)
+alter table creators add column if not exists creator_identity_id text;
+alter table creators add column if not exists source text not null default 'real';
+alter table creators add column if not exists imported_at timestamptz;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'fk_creators_creator_identity'
+  ) then
+    alter table creators
+      add constraint fk_creators_creator_identity
+      foreign key (creator_identity_id)
+      references creator_identities(id)
+      on delete set null;
+  end if;
+end
+$$;
+
+create unique index if not exists uniq_creators_creator_identity
+on creators(creator_identity_id)
+where creator_identity_id is not null;
+
+create index if not exists idx_creators_source on creators(source);
 
 create table if not exists creator_identity_accounts (
   id text primary key,

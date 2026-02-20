@@ -3,6 +3,10 @@
      ts-node generateCreators.ts > data/creators.seed.json
    or:
      node --loader ts-node/esm generateCreators.ts > data/creators.seed.json
+
+   Note:
+     This generator produces synthetic fixture creators only.
+     Seed them into `synthetic_creators` (default via `npm run seed`).
 */
 
 type Platform = "tiktok" | "instagram" | "youtube" | "x" | "linkedin";
@@ -370,4 +374,3 @@ fs.mkdirSync(path.dirname(outPath), { recursive: true });
 fs.writeFileSync(outPath, JSON.stringify(creators, null, 2), "utf8");
 
 console.log(`✅ wrote ${creators.length} creators to ${outPath}`);
-

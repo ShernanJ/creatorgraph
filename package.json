@@ -8,6 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "seed": "tsx lib/seed.ts",
+    "seed:real": "CREATOR_SEED_TARGET=creators tsx lib/seed.ts",
+    "move:synthetic-creators": "tsx lib/moveSyntheticCreators.ts",
     "generate-creators": "tsx lib/generateCreators.ts",
     "match:fixtures": "tsx lib/match/runFixtures.ts"
   },
