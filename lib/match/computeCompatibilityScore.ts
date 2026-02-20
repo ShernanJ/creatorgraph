@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 // lib/match/computeCompatibilityScore.ts
 
 import type {
@@ -19,6 +18,45 @@ import { platformAlignment } from "./modules/platformAlignment";
 import { engagementFit } from "./modules/engagementFit";
 import { audienceFit } from "./modules/audienceFit";
 
+function normalizePhrase(value: string) {
+  return String(value ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function uniqPhrases(values: string[]) {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of values) {
+    const value = normalizePhrase(raw);
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+    out.push(value);
+  }
+  return out;
+}
+
+function tokenSet(value: string) {
+  return new Set(normalizePhrase(value).split(/[^a-z0-9]+/).filter(Boolean));
+}
+
+function phraseSimilarity(a: string, b: string) {
+  const aa = normalizePhrase(a);
+  const bb = normalizePhrase(b);
+  if (!aa || !bb) return 0;
+  if (aa === bb) return 1;
+  if (aa.includes(bb) || bb.includes(aa)) return 0.84;
+
+  const ta = tokenSet(aa);
+  const tb = tokenSet(bb);
+  if (!ta.size || !tb.size) return 0;
+
+  let overlap = 0;
+  for (const token of ta) {
+    if (tb.has(token)) overlap += 1;
+  }
+  const denom = Math.max(1, Math.min(ta.size, tb.size));
+  return overlap / denom;
+}
+
 /**
  * Build a MatchSpec from the Brand record.
  * v1: intent/spec are simple defaults; next step we infer intent + specificity properly.
@@ -26,6 +64,8 @@ import { audienceFit } from "./modules/audienceFit";
 function buildMatchSpec(brand: Brand): MatchSpec {
   const topics =
     brand.match_topics?.length ? brand.match_topics : (brand.campaign_angles ?? brand.goals ?? []);
+  const priorityNiches = uniqPhrases(brand.priority_niches ?? []);
+  const priorityTopics = uniqPhrases(brand.priority_topics ?? []);
 
   return {
     intent: {
@@ -40,6 +80,8 @@ function buildMatchSpec(brand: Brand): MatchSpec {
     audiences: brand.target_audience ?? [],
     outcomes: brand.goals ?? [],
     platforms: brand.preferred_platforms ?? [],
+    priorityNiches,
+    priorityTopics,
     evidence_confidence: 0.7,
     specificity: 0.5,
   };
@@ -85,6 +127,44 @@ function toModuleOutput(name: ModuleName, result: ScoreResult): ModuleOutput {
   };
 }
 
+function computePriorityBoost(spec: MatchSpec, creator: Creator) {
+  const priorities = uniqPhrases([...(spec.priorityNiches ?? []), ...(spec.priorityTopics ?? [])]);
+  if (!priorities.length) {
+    return { boost: 0, reason: null as string | null, matchedPriorities: [] as string[] };
+  }
+
+  const creatorSignals = uniqPhrases([
+    creator.niche ?? "",
+    ...(creator.metrics?.top_topics ?? []).map((topic) => String(topic)),
+  ]);
+  if (!creatorSignals.length) {
+    return { boost: 0, reason: null as string | null, matchedPriorities: [] as string[] };
+  }
+
+  const matches = priorities
+    .map((priority) => {
+      let best = 0;
+      for (const signal of creatorSignals) {
+        best = Math.max(best, phraseSimilarity(priority, signal));
+      }
+      return { priority, score: best };
+    })
+    .filter((x) => x.score >= 0.34)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3);
+
+  if (!matches.length) {
+    return { boost: 0, reason: null as string | null, matchedPriorities: [] as string[] };
+  }
+
+  const avgScore = matches.reduce((sum, m) => sum + m.score, 0) / matches.length;
+  const boost = Math.min(0.16, 0.04 * matches.length + avgScore * 0.07);
+  const matchedPriorities = matches.map((m) => m.priority);
+  const reason = `priority fit: ${matchedPriorities.join(", ")}`;
+
+  return { boost, reason, matchedPriorities };
+}
+
 export function computeCompatibilityScore(args: {
   brand: Brand;
   creator: Creator;
@@ -107,17 +187,22 @@ export function computeCompatibilityScore(args: {
   const weights = confidenceBlendWeights({ baseWeights, modules });
 
   // 4) aggregate
-  const total = clamp01(
+  const baseTotal = clamp01(
     modules.reduce((acc, m) => acc + m.score * (weights[m.name] ?? 0), 0)
   );
+  const priorityBoost = computePriorityBoost(spec, args.creator);
+  const total = clamp01(baseTotal + priorityBoost.boost);
 
   // 5) reasons (module-driven, confidence-gated)
+  const moduleReasons = modules
+    .filter((m) => m.score * m.confidence >= 0.15)
+    .flatMap((m) => m.reasons)
+    .filter(Boolean);
+  if (priorityBoost.reason) moduleReasons.push(priorityBoost.reason);
+
   const reasons = Array.from(
     new Set(
-      modules
-        .filter((m) => m.score * m.confidence >= 0.15)
-        .flatMap((m) => m.reasons)
-        .filter(Boolean)
+      moduleReasons
     )
   );
 
@@ -141,6 +226,8 @@ export function computeCompatibilityScore(args: {
       // useful in debug views later:
       brandTopicsCount: spec.topics.length,
       creatorTopicsCount: (args.creator.metrics?.top_topics ?? []).length,
+      priorityBoost: Number(priorityBoost.boost.toFixed(4)),
+      priorityMatches: priorityBoost.matchedPriorities,
     },
   };
 }

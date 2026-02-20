@@ -14,6 +14,8 @@ export type Brand = {
   preferred_platforms?: string[];
   campaign_angles?: string[];
   match_topics?: string[];
+  priority_niches?: string[];
+  priority_topics?: string[];
 };
 
 export type PlatformMetric = {
@@ -47,6 +49,8 @@ export type MatchSpec = {
   audiences: string[];       // target audience types
   outcomes: string[];        // desired outcomes (e.g., conversions, signups, ugc)
   platforms: string[];       // preferred platforms
+  priorityNiches: string[];  // user-prioritized creator niches (boost only)
+  priorityTopics: string[];  // user-prioritized topic areas (boost only)
 
   // 0–1: how complete / specific this dossier is
   evidence_confidence: number;
@@ -85,5 +89,7 @@ export type CompatibilityScore = {
     baseWeights: Record<ModuleName, number>;
     brandTopicsCount: number;
     creatorTopicsCount: number;
+    priorityBoost: number;
+    priorityMatches: string[];
   };
 };

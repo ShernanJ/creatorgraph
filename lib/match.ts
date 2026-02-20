@@ -21,6 +21,7 @@ export function scoreMatch(brand: Brand, creator: Creator) {
       platformScore: Number((breakdownMap.platformAlignment ?? 0).toFixed(4)),
       engagementScore: Number((breakdownMap.engagementFit ?? 0).toFixed(4)),
       bestPlatform: res.meta?.bestPlatform ?? null,
+      priorityBoost: Number((res.meta?.priorityBoost ?? 0).toFixed(4)),
     },
   };
 }
