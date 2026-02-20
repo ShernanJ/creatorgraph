@@ -4,6 +4,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import Link from "next/link";
 
 type Step = "idle" | "crawling" | "analyzing" | "done" | "error";
 type PreviewStatus = "idle" | "checking" | "valid" | "invalid";
@@ -16,6 +17,12 @@ type Preview = {
   reachable?: boolean | null;
   reason?: string;
 };
+
+type StickerFall = {
+  left: number;
+  top: number;
+  width: number;
+} | null;
 
 function useDebounced<T>(value: T, delay = 450) {
   const [debounced, setDebounced] = React.useState(value);
@@ -31,10 +38,20 @@ export default function HomePage() {
   const [url, setUrl] = React.useState("");
   const [step, setStep] = React.useState<Step>("idle");
   const [error, setError] = React.useState<string | null>(null);
+  const [statusTick, setStatusTick] = React.useState(0);
+  const [isMounted, setIsMounted] = React.useState(false);
+  const [isRouteTransitioning, setIsRouteTransitioning] = React.useState(false);
+  const [stickerDropped, setStickerDropped] = React.useState(false);
+  const [stickerFall, setStickerFall] = React.useState<StickerFall>(null);
+  const stickerCoverRef = React.useRef<HTMLButtonElement | null>(null);
 
   // --- preflight preview state (no scraping) ---
   const [preview, setPreview] = React.useState<Preview>({ status: "idle" });
   const debouncedUrl = useDebounced(url, 450);
+
+  React.useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   React.useEffect(() => {
     const v = debouncedUrl.trim();
@@ -88,6 +105,53 @@ export default function HomePage() {
       cancelled = true;
     };
   }, [debouncedUrl]);
+
+  React.useEffect(() => {
+    if (step !== "crawling" && step !== "analyzing") return;
+    const id = setInterval(() => {
+      setStatusTick((n) => n + 1);
+    }, 1200);
+    return () => clearInterval(id);
+  }, [step]);
+
+  React.useEffect(() => {
+    if (!stickerFall) return;
+    const id = window.setTimeout(() => setStickerFall(null), 1600);
+    return () => window.clearTimeout(id);
+  }, [stickerFall]);
+
+  const onDropSticker = React.useCallback(() => {
+    if (stickerDropped) return;
+    const node = stickerCoverRef.current;
+    if (!node) return;
+    const rect = node.getBoundingClientRect();
+    setStickerFall({
+      left: rect.left,
+      top: rect.top,
+      width: rect.width,
+    });
+    setStickerDropped(true);
+  }, [stickerDropped]);
+
+  const startBrandRouteTransition = React.useCallback(
+    (brandId: string) => {
+      if (typeof window !== "undefined") {
+        window.sessionStorage.setItem(
+          "cg:route-handoff",
+          JSON.stringify({
+            from: "home",
+            at: Date.now(),
+          })
+        );
+      }
+
+      setIsRouteTransitioning(true);
+      window.setTimeout(() => {
+        router.push(`/brand/${brandId}`);
+      }, 420);
+    },
+    [router]
+  );
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -143,7 +207,7 @@ export default function HomePage() {
       }
 
       setStep("done");
-      router.push(`/brand/${brandId}`);
+      startBrandRouteTransition(brandId);
     } catch (err: any) {
       setStep("error");
       setError(err?.message ?? "something went wrong");
@@ -151,42 +215,68 @@ export default function HomePage() {
   }
 
   const isBusy = step === "crawling" || step === "analyzing";
-  const canContinue = !isBusy && preview.status === "valid";
+  const canContinue = !isBusy && !isRouteTransitioning && preview.status === "valid";
+
+  const crawlPhases = [
+    "mapping internal pages",
+    "reading pricing + positioning",
+    "extracting proof points",
+    "building evidence bundle",
+  ];
+  const analyzePhases = [
+    "classifying category + audience",
+    "projecting creator-native topics",
+    "assembling campaign signals",
+    "finalizing dossier",
+  ];
 
 
   const headline =
     step === "idle"
-      ? "What’s your brand website?"
+      ? "Enter Your Brand URL"
       : step === "crawling"
-      ? "Crawling your site…"
+      ? "Crawling Your Site…"
       : step === "analyzing"
-      ? "Analyzing…"
+      ? "Assembling Your Brand Intel…"
       : step === "done"
-      ? "Done."
+      ? "Launching Stan-Lee…"
       : "Something went wrong";
 
   const sub =
     step === "idle"
-      ? "Paste a brand URL — I’ll generate a grounded brand dossier and creator-native match angles."
+      ? "Drop your company URL and Stan-Lee will suit up."
       : step === "crawling"
-      ? "grabbing key pages (pricing, features, about, case studies)…"
+      ? `Stan-Lee is swinging through your site for proof points (pricing, features, about, case studies)… · ${
+          crawlPhases[statusTick % crawlPhases.length]
+        }`
       : step === "analyzing"
-      ? "structuring a grounded brand dossier + creator-native match topics…"
+      ? `Powering up your brand dossier and mapping creator superpower matches… · ${
+          analyzePhases[statusTick % analyzePhases.length]
+        }`
       : step === "done"
-      ? "redirecting you to the dossier…"
+      ? "Portal open. Taking you to your live mission control…"
       : "try again, or paste a different url";
 
   return (
-    <main className="min-h-screen w-full bg-[#2c2f3a] text-white">
+    <main
+      className={[
+        "min-h-screen w-full bg-[#2f3140] text-white",
+        isMounted ? "cg-page-enter" : "opacity-0",
+        isRouteTransitioning ? "cg-page-exit" : "",
+      ].join(" ")}
+    >
       {/* subtle vignette + gradients */}
       <div className="pointer-events-none fixed inset-0 -z-10">
         <div className="absolute inset-0 bg-[radial-gradient(1100px_650px_at_50%_40%,rgba(110,120,255,0.12),transparent_55%)]" />
         <div className="absolute inset-0 bg-[radial-gradient(900px_520px_at_50%_100%,rgba(130,70,255,0.10),transparent_60%)]" />
         <div className="absolute inset-0 bg-[radial-gradient(700px_400px_at_0%_0%,rgba(255,255,255,0.05),transparent_55%)]" />
+        <div className="absolute inset-0 cg-bg-drift" />
       </div>
 
+      {isRouteTransitioning ? <div className="pointer-events-none fixed inset-0 z-40 cg-route-curtain" /> : null}
+
       {/* top bar */}
-      <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-5">
+      <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-5 cg-soft-reveal">
         <div className="flex items-center gap-3">
           <Image
             src="/Stan-Lee-Agent.png"
@@ -194,7 +284,7 @@ export default function HomePage() {
             width={28}
             height={28}
             priority
-            className="select-none drop-shadow-[0_0_30px_rgba(108,92,255,0.45)]"
+            className="select-none animate-floaty-soft drop-shadow-[0_0_30px_rgba(108,92,255,0.45)]"
           />
           <span className="text-base font-semibold tracking-tight">
             Stan Lee
@@ -202,34 +292,22 @@ export default function HomePage() {
           <span className="text-sm text-white/60">by CreatorGraph</span>
         </div>
 
-        <button
-          type="button"
-          aria-label="Close"
-          className="rounded-full p-2 text-white/60 hover:text-white hover:bg-white/5"
-          onClick={() => {
-            setUrl("");
-            setError(null);
-            setPreview({ status: "idle" });
-            setStep("idle");
-          }}
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-            <path
-              d="M18 6L6 18M6 6l12 12"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-            />
-          </svg>
-        </button>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/explorer"
+            className="rounded-xl px-3 py-2 text-sm text-white/90 ring-1 ring-white/15 bg-white/5 hover:bg-white/10"
+          >
+            Explore Creators on Stan
+          </Link>
+        </div>
       </header>
 
       {/* center */}
-      <section className="mx-auto flex w-full max-w-3xl flex-col items-center px-6 pb-24 pt-10 text-center">
+      <section className="mx-auto flex w-full max-w-3xl flex-col items-center px-6 pb-24 pt-10 text-center cg-soft-reveal">
         {/* hero mascot */}
         <div className="relative mb-8">
           <div className="absolute inset-0 -z-10 flex items-center justify-center">
-            <div className="h-40 w-40 rounded-full bg-[radial-gradient(circle,rgba(108,92,255,0.25),transparent_70%)] blur-2xl" />
+            <div className="h-40 w-40 rounded-full bg-[radial-gradient(circle,rgba(108,92,255,0.25),transparent_70%)] blur-2xl cg-orbit-slow" />
           </div>
           <Image
             src="/Stan-Lee-Agent.png"
@@ -237,17 +315,64 @@ export default function HomePage() {
             width={150}
             height={150}
             priority
-            className="select-none drop-shadow-[0_0_60px_rgba(108,92,255,0.50)]"
+            className={[
+              "select-none drop-shadow-[0_0_60px_rgba(108,92,255,0.50)]",
+              "transition-transform duration-500",
+              isBusy ? "animate-floaty" : "",
+            ].join(" ")}
           />
         </div>
 
-        <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">
-          {headline}
-        </h1>
+        <div className="w-full max-w-2xl min-h-[138px] sm:min-h-[148px]">
+          <h1
+            className={[
+              "text-4xl font-semibold tracking-tight leading-[1.12] pb-1 sm:text-5xl",
+              isBusy ? "status-shimmer" : "",
+            ].join(" ")}
+          >
+            {headline}
+          </h1>
 
-        <p className="mt-3 max-w-xl text-sm leading-6 text-white/60 sm:text-base">
-          {sub}
-        </p>
+          <p
+            className={[
+              "mt-4 text-sm leading-6 sm:text-base",
+              "whitespace-pre-line",
+              isBusy ? "text-white/80" : "text-white/60",
+            ].join(" ")}
+          >
+            {step === "idle" ? (
+              <>
+                {sub}
+                <br />
+                Then I&apos;ll assemble{" "}
+                <span className={["avengers-sticker", stickerDropped ? "is-dropped" : ""].join(" ")}>
+                  <span className="avengers-under">
+                    The Avengers
+                  </span>
+                  <button
+                    type="button"
+                    onClick={onDropSticker}
+                    ref={stickerCoverRef}
+                    className="avengers-cover"
+                    aria-label="Drop creators sticker"
+                  >
+                    creators
+                    <span className="avengers-corner" aria-hidden />
+                  </button>
+                </span>{" "}
+                your brand can work with.
+              </>
+            ) : (
+              sub
+            )}
+          </p>
+        </div>
+
+        {isBusy && (
+          <div className="mt-4 h-1.5 w-full max-w-xl overflow-hidden rounded-full bg-white/10 ring-1 ring-white/10">
+            <div className="h-full w-1/3 rounded-full bg-[linear-gradient(90deg,#6c5cff,#92a0ff,#6c5cff)] animate-loading-bar" />
+          </div>
+        )}
 
         <form onSubmit={onSubmit} className="mt-10 w-full max-w-xl">
 
@@ -349,14 +474,14 @@ export default function HomePage() {
       if (step !== "idle") setStep("idle");
     }}
     placeholder="https://stan.store"
-    disabled={isBusy}
+    disabled={isBusy || isRouteTransitioning}
     className={[
       "w-full rounded-2xl bg-white/5 px-4 py-4 pl-16 pr-24",
       "ring-1 ring-white/15 outline-none",
       "placeholder:text-white/35",
       "focus:ring-2 focus:ring-[#6c5cff]/70",
-      "disabled:opacity-60",
-    ].join(" ")}
+              "disabled:opacity-60 disabled:cursor-not-allowed",
+            ].join(" ")}
   />
 </div>
 
@@ -364,10 +489,6 @@ export default function HomePage() {
           {/* preview strip */}
           <div className="mt-3 flex items-center justify-between text-sm">
             <div className="flex items-center gap-2 text-white/60">
-              {preview.status === "idle" && (
-                <span className="text-white/35">paste a brand website to validate</span>
-              )}
-
               {preview.status === "checking" && (
                 <span className="inline-flex items-center gap-2">
                   <span className="h-2 w-2 animate-pulse rounded-full bg-[#6c5cff]" />
@@ -421,6 +542,21 @@ export default function HomePage() {
           {error && <p className="mt-4 text-sm text-red-300">{error}</p>}
         </form>
       </section>
+
+      {stickerFall ? (
+        <span
+          aria-hidden
+          className="avengers-fall-clone"
+          style={{
+            left: `${stickerFall.left}px`,
+            top: `${stickerFall.top}px`,
+            width: `${stickerFall.width}px`,
+          }}
+        >
+          creators
+          <span className="avengers-corner" aria-hidden />
+        </span>
+      ) : null}
     </main>
   );
 }

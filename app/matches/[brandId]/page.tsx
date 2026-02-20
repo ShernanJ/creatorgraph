@@ -75,7 +75,13 @@ export default async function MatchesPage(props: {
   );
 
   return (
-    <main className="mx-auto max-w-4xl px-6 py-16 space-y-8">
+    <main className="min-h-screen w-full bg-[#2c2f3a] text-white">
+      <div className="pointer-events-none fixed inset-0 -z-10">
+        <div className="absolute inset-0 bg-[radial-gradient(1100px_650px_at_50%_40%,rgba(110,120,255,0.12),transparent_55%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(900px_520px_at_50%_100%,rgba(130,70,255,0.10),transparent_60%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(700px_400px_at_0%_0%,rgba(255,255,255,0.05),transparent_55%)]" />
+      </div>
+      <section className="mx-auto max-w-4xl px-6 py-16 space-y-8">
       <div className="space-y-2">
         <h1 className="text-3xl font-semibold">creator matches</h1>
         <p className="text-white/70">{brand?.name ?? brandId}</p>
@@ -144,6 +150,7 @@ export default async function MatchesPage(props: {
           view creator-side opportunity feed →
         </Link>
       </div>
+      </section>
     </main>
   );
 }

@@ -155,6 +155,20 @@ Scoring is deterministic and explainable with module-level reasons and confidenc
 
 ---
 
+# Niche Catalog (Reference)
+
+Canonical niche taxonomy and planned expansion list live in:
+
+- `lib/match/nicheCatalog.ts`
+
+It includes:
+
+- active canonical niches
+- legacy niche labels (for alias/normalization support)
+- planned niches approved for future backend rollout
+
+---
+
 # API Surface (Current)
 
 - `POST /api/preview-url`

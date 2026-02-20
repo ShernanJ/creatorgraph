@@ -32,6 +32,155 @@ function normalizeUrl(input: string) {
   return s;
 }
 
+function asStringArray(v: any): string[] {
+  if (!v) return [];
+  if (Array.isArray(v)) return v.map((x) => String(x)).filter(Boolean);
+  if (typeof v === "string") {
+    try {
+      const parsed = JSON.parse(v);
+      if (Array.isArray(parsed)) return parsed.map((x) => String(x)).filter(Boolean);
+    } catch {}
+  }
+  return [];
+}
+
+function uniqStrings(values: string[]) {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of values) {
+    const value = String(raw ?? "").trim();
+    if (!value) continue;
+    const key = value.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(value);
+  }
+  return out;
+}
+
+function parseIntakePreferences(raw: any) {
+  if (!raw || typeof raw !== "object") return null;
+
+  const partnershipType =
+    typeof raw.partnershipType === "string" ? raw.partnershipType.trim().toLowerCase() : null;
+  const compensationModel =
+    typeof raw.compensationModel === "string" ? raw.compensationModel.trim().toLowerCase() : null;
+  const compensationUnit =
+    typeof raw.compensationUnit === "string" ? raw.compensationUnit.trim().toLowerCase() : null;
+
+  let compensationAmount: number | null = null;
+  if (typeof raw.compensationAmount === "number" && Number.isFinite(raw.compensationAmount)) {
+    compensationAmount = raw.compensationAmount;
+  } else if (typeof raw.compensationAmount === "string" && raw.compensationAmount.trim()) {
+    const n = Number(raw.compensationAmount);
+    compensationAmount = Number.isFinite(n) ? n : null;
+  }
+
+  return {
+    partnershipType,
+    compensationModel,
+    compensationAmount,
+    compensationUnit,
+  };
+}
+
+function intakeToSignals(prefs: ReturnType<typeof parseIntakePreferences>) {
+  if (!prefs) {
+    return {
+      goalSignals: [] as string[],
+      angleSignals: [] as string[],
+      topicSignals: [] as string[],
+      summaryLine: "",
+    };
+  }
+
+  const goalSignals: string[] = [];
+  const angleSignals: string[] = [];
+  const topicSignals: string[] = [];
+  const summary: string[] = [];
+
+  const partnershipMap: Record<string, { label: string; goal: string; topic: string }> = {
+    affiliate: {
+      label: "affiliate program",
+      goal: "drive affiliate sales",
+      topic: "affiliate creators",
+    },
+    sponsored_video: {
+      label: "sponsored videos",
+      goal: "run sponsored video placements",
+      topic: "brand integration videos",
+    },
+    ugc: {
+      label: "UGC assets",
+      goal: "source UGC creative",
+      topic: "ugc creators",
+    },
+    ambassador: {
+      label: "ambassador partnership",
+      goal: "secure long-term ambassadors",
+      topic: "creator ambassadors",
+    },
+  };
+
+  const compensationMap: Record<string, { label: string; goal: string; topic: string }> = {
+    flat_fee: {
+      label: "flat fee",
+      goal: "predictable flat-fee creator deals",
+      topic: "flat fee collaborations",
+    },
+    cpm: {
+      label: "CPM (per 1k views)",
+      goal: "performance-priced creator deals",
+      topic: "cpm creator pricing",
+    },
+    rev_share: {
+      label: "revenue share",
+      goal: "commission-based creator deals",
+      topic: "affiliate commission campaigns",
+    },
+    hybrid: {
+      label: "hybrid compensation",
+      goal: "hybrid creator compensation",
+      topic: "hybrid creator partnerships",
+    },
+  };
+
+  if (prefs.partnershipType && partnershipMap[prefs.partnershipType]) {
+    const m = partnershipMap[prefs.partnershipType];
+    goalSignals.push(m.goal);
+    angleSignals.push(`preferred collaboration: ${m.label}`);
+    topicSignals.push(m.topic);
+    summary.push(`Preferred collaboration type: ${m.label}.`);
+  }
+
+  if (prefs.compensationModel && compensationMap[prefs.compensationModel]) {
+    const m = compensationMap[prefs.compensationModel];
+    goalSignals.push(m.goal);
+    angleSignals.push(`preferred compensation model: ${m.label}`);
+    topicSignals.push(m.topic);
+    summary.push(`Preferred compensation model: ${m.label}.`);
+  }
+
+  if (
+    typeof prefs.compensationAmount === "number" &&
+    Number.isFinite(prefs.compensationAmount) &&
+    prefs.compensationAmount > 0
+  ) {
+    const unit = prefs.compensationUnit?.replaceAll("_", " ") ?? "per video";
+    const amountText = `$${Math.round(prefs.compensationAmount)}`;
+    angleSignals.push(`target payout: ${amountText} ${unit}`);
+    topicSignals.push(`creator rate ${amountText} ${unit}`);
+    summary.push(`Stated payout target: ${amountText} ${unit}.`);
+  }
+
+  return {
+    goalSignals: uniqStrings(goalSignals),
+    angleSignals: uniqStrings(angleSignals),
+    topicSignals: uniqStrings(topicSignals),
+    summaryLine: summary.join(" "),
+  };
+}
+
 function json400(error: string, extra?: any) {
   console.error("[analyze-brand] 400:", error, extra ?? "");
   return NextResponse.json({ error, ...extra }, { status: 400 });
@@ -55,6 +204,8 @@ ${t}`;
 export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
   if (!body) return json400("invalid json body");
+  const intakePrefs = parseIntakePreferences(body.intakePreferences);
+  const intakeSignals = intakeToSignals(intakePrefs);
 
   // optional: allow analyze by existing brandId (crawl-first path)
   const brandIdFromBody = body.brandId;
@@ -159,6 +310,35 @@ export async function POST(req: Request) {
 
   // create or update brand
   const brandId = existingBrand?.id ?? `br_${nanoid(10)}`;
+  const mergedGoals = uniqStrings([
+    ...asStringArray(existingBrand?.goals),
+    ...asStringArray(profile.goals),
+    ...intakeSignals.goalSignals,
+  ]);
+  const mergedCampaignAngles = uniqStrings([
+    ...asStringArray(existingBrand?.campaign_angles),
+    ...asStringArray(profile.campaign_angles),
+    ...intakeSignals.angleSignals,
+  ]);
+  const mergedMatchTopics = uniqStrings([
+    ...asStringArray(existingBrand?.match_topics),
+    ...asStringArray(profile.match_topics),
+    ...intakeSignals.topicSignals,
+  ]);
+  const mergedPreferredPlatforms = uniqStrings([
+    ...asStringArray(existingBrand?.preferred_platforms),
+    ...asStringArray(profile.preferred_platforms),
+  ]);
+  const mergedTargetAudience = uniqStrings([
+    ...asStringArray(existingBrand?.target_audience),
+    ...asStringArray(profile.target_audience),
+  ]);
+  const baseSummary = String(profile.raw_summary ?? "").trim();
+  const summarySuffix = intakeSignals.summaryLine;
+  const mergedSummary =
+    summarySuffix && !baseSummary.toLowerCase().includes(summarySuffix.toLowerCase())
+      ? `${baseSummary}${baseSummary ? "\n\n" : ""}${summarySuffix}`
+      : baseSummary;
 
   if (existingBrand) {
     await q(
@@ -179,13 +359,13 @@ export async function POST(req: Request) {
         profile.name ?? existingBrand.name ?? "unknown brand",
         profile.website ?? url,
         profile.category ?? null,
-        JSON.stringify(profile.target_audience ?? []),
-        JSON.stringify(profile.goals ?? []),
-        JSON.stringify(profile.preferred_platforms ?? []),
+        JSON.stringify(mergedTargetAudience),
+        JSON.stringify(mergedGoals),
+        JSON.stringify(mergedPreferredPlatforms),
         profile.budget_range ?? existingBrand.budget_range ?? "2k-10k",
-        JSON.stringify(profile.campaign_angles ?? []),
-        JSON.stringify(profile.match_topics ?? []),
-        profile.raw_summary ?? "",
+        JSON.stringify(mergedCampaignAngles),
+        JSON.stringify(mergedMatchTopics),
+        mergedSummary,
       ]
     );
   } else {
@@ -205,13 +385,13 @@ export async function POST(req: Request) {
         profile.name ?? "unknown brand",
         profile.website ?? url,
         profile.category ?? null,
-        JSON.stringify(profile.target_audience ?? []),
-        JSON.stringify(profile.goals ?? []),
-        JSON.stringify(profile.preferred_platforms ?? []),
+        JSON.stringify(mergedTargetAudience),
+        JSON.stringify(mergedGoals),
+        JSON.stringify(mergedPreferredPlatforms),
         profile.budget_range ?? "2k-10k",
-        JSON.stringify(profile.campaign_angles ?? []),
-        JSON.stringify(profile.match_topics ?? []),
-        profile.raw_summary ?? "",
+        JSON.stringify(mergedCampaignAngles),
+        JSON.stringify(mergedMatchTopics),
+        mergedSummary,
       ]
     );
   }
