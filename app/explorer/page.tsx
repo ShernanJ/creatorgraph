@@ -48,6 +48,8 @@ export default function ExplorerPage() {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [term, setTerm] = React.useState("");
+  const [sourceLabel, setSourceLabel] = React.useState<string>("creators");
+  const [fallbackUsed, setFallbackUsed] = React.useState(false);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -63,9 +65,11 @@ export default function ExplorerPage() {
           throw new Error(data?.error ?? "failed to load creators");
         }
         setCreators(Array.isArray(data?.creators) ? data.creators : []);
-      } catch (e: any) {
+        setSourceLabel(typeof data?.source === "string" ? data.source : "creators");
+        setFallbackUsed(Boolean(data?.fallbackUsed));
+      } catch (e: unknown) {
         if (cancelled) return;
-        setError(e?.message ?? "failed to load creators");
+        setError(e instanceof Error ? e.message : "failed to load creators");
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -131,7 +135,8 @@ export default function ExplorerPage() {
           <p className="text-sm text-red-300">{error}</p>
         ) : (
           <p className="text-sm text-white/60">
-            showing {filtered.length} / {creators.length} creators
+            showing {filtered.length} / {creators.length} creators · source {sourceLabel}
+            {fallbackUsed ? " (fallback)" : ""}
           </p>
         )}
 

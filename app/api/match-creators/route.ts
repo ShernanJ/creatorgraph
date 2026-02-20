@@ -48,6 +48,7 @@ function parseRankingDirectives(raw: any) {
 export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
   const brandId = typeof body?.brandId === "string" ? body.brandId : "";
+  const limit = typeof body?.limit === "number" && body.limit > 0 ? Math.min(500, body.limit) : 500;
   if (!brandId) {
     return NextResponse.json({ error: "missing brandId" }, { status: 400 });
   }
@@ -58,7 +59,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "brand not found" }, { status: 404 });
   }
 
-  const creators = await q<any>(`select * from creators limit 500`);
+  let creators = await q<any>(`select * from creators limit $1`, [limit]);
+  let sourceTable: "creators" | "synthetic_creators" = "creators";
+  let persistedMatches = true;
+  if (!creators.length) {
+    creators = await q<any>(`select * from synthetic_creators limit $1`, [limit]);
+    sourceTable = "synthetic_creators";
+    persistedMatches = false;
+  }
+
   const mergedPreferredPlatforms = uniqStrings([
     ...asStringArray(brand.preferred_platforms),
     ...rankingDirectives.preferredPlatforms,
@@ -98,26 +107,30 @@ export async function POST(req: Request) {
     .sort((a, b) => b.score - a.score)
     .slice(0, 12);
 
-  for (const r of ranked) {
-    await q(
-      `insert into matches (id, brand_id, creator_id, score, reasons)
-       values ($1,$2,$3,$4,$5::jsonb)
-       on conflict (brand_id, creator_id) do update set
-         score = excluded.score,
-         reasons = excluded.reasons`,
-      [
-        `mt_${nanoid(10)}`,
-        brandId,
-        r.creator.id,
-        r.score,
-        JSON.stringify({ reasons: r.reasons, breakdown: r.breakdown }),
-      ]
-    );
+  if (persistedMatches) {
+    for (const r of ranked) {
+      await q(
+        `insert into matches (id, brand_id, creator_id, score, reasons)
+         values ($1,$2,$3,$4,$5::jsonb)
+         on conflict (brand_id, creator_id) do update set
+           score = excluded.score,
+           reasons = excluded.reasons`,
+        [
+          `mt_${nanoid(10)}`,
+          brandId,
+          r.creator.id,
+          r.score,
+          JSON.stringify({ reasons: r.reasons, breakdown: r.breakdown }),
+        ]
+      );
+    }
   }
 
   return NextResponse.json({
     brandId,
     rankingDirectives,
+    sourceTable,
+    persistedMatches,
     ranked: ranked.map((r) => ({
       creator: r.creator,
       score: r.score,
