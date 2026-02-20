@@ -85,3 +85,56 @@ create index if not exists idx_raw_accounts_platform on raw_accounts(platform);
 create index if not exists idx_raw_accounts_stan_slug on raw_accounts(stan_slug);
 create unique index if not exists uniq_raw_accounts_run_query_url
 on raw_accounts(discovery_run_id, query, source_url);
+
+-- stage 3: creator identity resolution
+create table if not exists creator_identities (
+  id text primary key,
+  canonical_stan_slug text unique,
+  canonical_personal_domain text unique,
+  status text not null default 'active',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_creator_identities_stan on creator_identities(canonical_stan_slug);
+create index if not exists idx_creator_identities_domain on creator_identities(canonical_personal_domain);
+
+create table if not exists creator_identity_accounts (
+  id text primary key,
+  creator_identity_id text not null references creator_identities(id) on delete cascade,
+  raw_account_id text not null references raw_accounts(id) on delete cascade,
+  platform text,
+  handle text,
+  normalized_profile_url text,
+  source_url text not null,
+  stan_slug text,
+  personal_domain text,
+  linkage_reason text not null,
+  created_at timestamptz not null default now(),
+  unique(raw_account_id)
+);
+
+create index if not exists idx_creator_identity_accounts_identity
+on creator_identity_accounts(creator_identity_id);
+create index if not exists idx_creator_identity_accounts_stan
+on creator_identity_accounts(stan_slug);
+create index if not exists idx_creator_identity_accounts_domain
+on creator_identity_accounts(personal_domain);
+
+create table if not exists identity_merge_candidates (
+  id text primary key,
+  raw_account_id text not null references raw_accounts(id) on delete cascade,
+  discovery_run_id text not null,
+  candidate_identity_id text references creator_identities(id) on delete set null,
+  reason text not null,
+  confidence numeric not null default 0.5,
+  status text not null default 'pending',
+  meta jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  unique(raw_account_id)
+);
+
+create index if not exists idx_identity_merge_candidates_run
+on identity_merge_candidates(discovery_run_id);
+create index if not exists idx_identity_merge_candidates_status
+on identity_merge_candidates(status);
