@@ -33,6 +33,46 @@ function useDebounced<T>(value: T, delay = 450) {
   return debounced;
 }
 
+async function safeResponseBody(res: Response): Promise<Record<string, unknown>> {
+  const raw = await res.text().catch(() => "");
+  if (!raw) return {};
+  try {
+    return JSON.parse(raw) as Record<string, unknown>;
+  } catch {
+    return { error: raw };
+  }
+}
+
+function summarizeFallbackDiagnostics(raw: unknown) {
+  if (!Array.isArray(raw)) return "";
+  const lines = raw
+    .slice(0, 4)
+    .map((item) => {
+      if (!item || typeof item !== "object") return "";
+      const row = item as Record<string, unknown>;
+      const stage = String(row.stage ?? "unknown");
+      const status =
+        row.status != null ? `${String(row.status)} ${String(row.statusText ?? "")}`.trim() : "";
+      const message = String(row.message ?? row.reason ?? "");
+      const blocked =
+        row.blockedByBotDetection === true ? "bot-protected" : "";
+      const pagesFound =
+        typeof row.pagesFound === "number" ? `pages=${row.pagesFound}` : "";
+      const snippetCount =
+        typeof row.snippetCount === "number" ? `snippets=${row.snippetCount}` : "";
+      const resultsCount =
+        typeof row.resultsCount === "number" ? `results=${row.resultsCount}` : "";
+      const diagnostics = Array.isArray(row.diagnostics)
+        ? String(row.diagnostics[0] ?? "").trim()
+        : "";
+      return [stage, status, message, blocked, pagesFound, snippetCount, resultsCount, diagnostics]
+        .filter(Boolean)
+        .join(" · ");
+    })
+    .filter(Boolean);
+  return lines.join(" | ");
+}
+
 export default function HomePage() {
   const router = useRouter();
   const [url, setUrl] = React.useState("");
@@ -165,44 +205,65 @@ export default function HomePage() {
     }
 
     try {
+      const isLikelyProtected = preview.reason === "protected" || preview.reachable === false;
+
       // 1) analyze first to create the brand row (fast fallback path)
       setStep("analyzing");
       const analyze1 = await fetch("/api/analyze-brand", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: normalized }),
+        body: JSON.stringify({
+          url: normalized,
+          preferGoogleDorkAgent: isLikelyProtected,
+        }),
       });
 
-      const a1 = await analyze1.json();
-      if (!analyze1.ok) throw new Error(a1?.error ?? "analyze failed");
+      const a1 = await safeResponseBody(analyze1);
+      if (!analyze1.ok) {
+        const diag = summarizeFallbackDiagnostics(a1?.fallbackDiagnostics);
+        throw new Error(
+          String(a1?.message ?? a1?.error ?? "analyze failed") +
+            (diag ? ` (${diag})` : "")
+        );
+      }
 
-      const brandId = a1.brandId as string;
+      const brandId = String(a1.brandId ?? "");
+      if (!brandId) throw new Error("analyze returned no brand id");
+      const usedSource = String(a1.used ?? "");
+      const skipImmediateCrawl =
+        isLikelyProtected ||
+        usedSource === "google_dork_agent" ||
+        usedSource === "playwright_site_agent" ||
+        usedSource === "llm_search_backup_agent" ||
+        usedSource === "model_knowledge_fallback";
 
-      // 2) crawl with playwright
-      setStep("crawling");
-      const crawl = await fetch("/api/crawl-brand", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ brandId }),
-      });
-
-      // crawl can fail sometimes; we don't want to block the user
-      const c1 = await crawl.json().catch(() => ({}));
-      if (!crawl.ok) {
-        console.warn("crawl failed:", c1);
-      } else {
-        // 3) re-analyze using brand_pages (better ontology + topics)
-        setStep("analyzing");
-        const analyze2 = await fetch("/api/analyze-brand", {
+      if (!skipImmediateCrawl) {
+        // 2) crawl with playwright
+        setStep("crawling");
+        const crawl = await fetch("/api/crawl-brand", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ brandId }),
-          cache: "no-store",
         });
 
-        const a2 = await analyze2.json();
-        if (!analyze2.ok) {
-          console.warn("reanalyze failed:", a2);
+        // crawl can fail sometimes; we don't want to block the user
+        const c1 = await crawl.json().catch(() => ({}));
+        if (!crawl.ok) {
+          console.warn("crawl failed:", c1);
+        } else {
+          // 3) re-analyze using brand_pages (better ontology + topics)
+          setStep("analyzing");
+          const analyze2 = await fetch("/api/analyze-brand", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ brandId }),
+            cache: "no-store",
+          });
+
+          const a2 = await safeResponseBody(analyze2);
+          if (!analyze2.ok) {
+            console.warn("reanalyze failed:", a2);
+          }
         }
       }
 
@@ -260,7 +321,7 @@ export default function HomePage() {
   return (
     <main
       className={[
-        "min-h-screen w-full bg-[#2f3140] text-white",
+        "h-screen w-full overflow-hidden bg-[#2f3140] text-white",
         isMounted ? "cg-page-enter" : "opacity-0",
         isRouteTransitioning ? "cg-page-exit" : "",
       ].join(" ")}

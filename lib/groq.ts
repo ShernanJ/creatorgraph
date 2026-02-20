@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import Groq from "groq-sdk";
+import { GROQ_CREDITS_EXHAUSTED_USER_MESSAGE } from "@/lib/messages";
 
 const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY!,
@@ -23,6 +24,35 @@ type GroqTextOptions = {
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
+
+function collectErrText(err: any) {
+  return [
+    err?.message,
+    err?.error?.message,
+    err?.response?.data?.error?.message,
+    err?.response?.body?.error?.message,
+    err?.cause?.message,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
+export function isGroqCreditsExhaustedError(err: unknown) {
+  const e = err as any;
+  const status = e?.status ?? e?.response?.status;
+  const txt = collectErrText(e);
+
+  const statusHint = status === 402;
+  const textHint =
+    /insufficient[_\s-]?quota|out of credits|credit balance|billing|payment required|quota exceeded|exceeded.*quota/i.test(
+      txt
+    );
+
+  return Boolean(statusHint || textHint);
+}
+
+export { GROQ_CREDITS_EXHAUSTED_USER_MESSAGE };
 
 export async function groqText(prompt: string, opts: GroqTextOptions = {}) {
   const client = getGroq();

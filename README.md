@@ -121,6 +121,16 @@ Outreach + Deal Lifecycle Tracking
 Known limitation:
 - baseline HTML extraction can be sparse for JS-heavy Stan pages.
 
+## Brand Ingestion Fallback Chain
+
+When `POST /api/analyze-brand` cannot parse enough content via a normal fetch, it now escalates through agent fallbacks:
+
+1. direct site fetch
+2. Playwright site crawlability agent (same-domain content extraction)
+3. Playwright Google-dork backup agent (`site:<domain> "about"` and related queries)
+4. LLM-guided web search backup agent (query generation + snippet bundling)
+5. model-knowledge fallback profile when external extraction is blocked
+
 ---
 
 # End-to-End Data Flow (Current)
