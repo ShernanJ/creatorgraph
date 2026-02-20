@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { q } from "@/lib/db";
+import { extractCompatibilitySignals } from "@/lib/creator/import/extractCompatibilitySignals";
 
 const bodySchema = z.object({
   creatorIdentityId: z.string().min(3).optional(),
@@ -17,6 +18,7 @@ type CandidateRow = {
   canonical_stan_slug: string | null;
   stan_url: string | null;
   bio_description: string | null;
+  pricing_points: unknown;
   product_types: unknown;
   offers: unknown;
   outbound_socials: unknown;
@@ -26,6 +28,12 @@ type CandidateRow = {
   handles: unknown;
   profile_urls: unknown;
   source_urls: unknown;
+  account_titles: unknown;
+  account_snippets: unknown;
+  account_queries: unknown;
+  social_platform_metrics: unknown;
+  social_estimated_engagement: number | null;
+  social_avg_confidence: number | null;
   already_imported: boolean;
 };
 
@@ -50,6 +58,19 @@ function asStringArray(v: unknown): string[] {
   return [];
 }
 
+function asObject(v: unknown): Record<string, unknown> {
+  if (v && typeof v === "object" && !Array.isArray(v)) return v as Record<string, unknown>;
+  if (typeof v === "string") {
+    try {
+      const parsed = JSON.parse(v);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {}
+  }
+  return {};
+}
+
 function uniqStrings(values: string[]) {
   const seen = new Set<string>();
   const out: string[] = [];
@@ -62,26 +83,6 @@ function uniqStrings(values: string[]) {
     out.push(next);
   }
   return out;
-}
-
-function normalizePlatform(value: string): string | null {
-  const v = value.trim().toLowerCase();
-  if (!v) return null;
-  if (v.includes("insta")) return "instagram";
-  if (v.includes("tiktok") || v === "tt") return "tiktok";
-  if (v.includes("youtube") || v.includes("youtu") || v === "yt") return "youtube";
-  if (v === "x" || v.includes("x.com") || v.includes("twitter")) return "x";
-  if (v.includes("linkedin") || v === "in") return "linkedin";
-  return null;
-}
-
-function platformFromUrl(url: string): string | null {
-  try {
-    const host = new URL(url).hostname.toLowerCase();
-    return normalizePlatform(host);
-  } catch {
-    return null;
-  }
 }
 
 function titleCaseFromHandle(handle: string) {
@@ -102,125 +103,6 @@ function displayNameForCandidate(row: CandidateRow) {
   if (stanSlug) return titleCaseFromHandle(stanSlug);
 
   return `Creator ${row.creator_identity_id.replace(/^ci_/, "").slice(0, 8)}`;
-}
-
-type NicheInference = {
-  niche: string;
-  topics: string[];
-  audiences: string[];
-};
-
-const NICHE_RULES: Array<{ pattern: RegExp; result: NicheInference }> = [
-  {
-    pattern: /\b(fitness|gym|workout|nutrition|weight loss|wellness)\b/i,
-    result: {
-      niche: "fitness coaching",
-      topics: ["gym routines", "fitness", "nutrition", "weight loss"],
-      audiences: ["gym beginners", "wellness seekers"],
-    },
-  },
-  {
-    pattern: /\b(finance|invest|credit|debt|budget|money)\b/i,
-    result: {
-      niche: "personal finance",
-      topics: ["budgeting", "saving", "investing", "credit"],
-      audiences: ["young professionals", "students"],
-    },
-  },
-  {
-    pattern: /\b(skincare|beauty|makeup|fashion)\b/i,
-    result: {
-      niche: "beauty & skincare",
-      topics: ["skincare", "beauty", "product reviews"],
-      audiences: ["beauty shoppers", "women 18-34"],
-    },
-  },
-  {
-    pattern: /\b(ecommerce|shopify|ads|marketing|conversion)\b/i,
-    result: {
-      niche: "ecommerce & marketing",
-      topics: ["growth marketing", "ecommerce", "creative testing"],
-      audiences: ["store owners", "marketers"],
-    },
-  },
-  {
-    pattern: /\b(ai|automation|prompt|agent|productivity)\b/i,
-    result: {
-      niche: "ai productivity",
-      topics: ["ai tools", "automation", "productivity"],
-      audiences: ["founders", "operators"],
-    },
-  },
-  {
-    pattern: /\b(real estate|housing|mortgage|property)\b/i,
-    result: {
-      niche: "real estate investing",
-      topics: ["real estate", "investing", "cash flow"],
-      audiences: ["first time investors", "side hustlers"],
-    },
-  },
-  {
-    pattern: /\b(coach|coaching|consulting|mentorship)\b/i,
-    result: {
-      niche: "business coaching",
-      topics: ["coaching", "offers", "positioning"],
-      audiences: ["coaches", "solopreneurs"],
-    },
-  },
-];
-
-function inferNicheAndTopics(row: CandidateRow): NicheInference {
-  const blob = [
-    row.bio_description ?? "",
-    ...asStringArray(row.product_types),
-    ...asStringArray(row.offers),
-    row.canonical_stan_slug ?? "",
-  ]
-    .join(" ")
-    .toLowerCase();
-
-  const matched = NICHE_RULES.find((rule) => rule.pattern.test(blob));
-  if (matched) return matched.result;
-
-  return {
-    niche: "creator monetization",
-    topics: ["creator economy", "digital products", "audience growth"],
-    audiences: ["content creators", "solopreneurs"],
-  };
-}
-
-function inferProducts(row: CandidateRow) {
-  const explicit = asStringArray(row.product_types);
-  if (explicit.length) return uniqStrings(explicit).slice(0, 8);
-
-  const offers = asStringArray(row.offers).join(" ").toLowerCase();
-  const out: string[] = [];
-  if (/\b(course|program)\b/.test(offers)) out.push("course");
-  if (/\b(coaching|consult)\b/.test(offers)) out.push("coaching");
-  if (/\b(template|notion)\b/.test(offers)) out.push("template");
-  if (/\b(community|membership)\b/.test(offers)) out.push("membership");
-  if (/\b(newsletter|substack)\b/.test(offers)) out.push("newsletter");
-  if (/\b(ebook|guide|pdf)\b/.test(offers)) out.push("digital guide");
-  return uniqStrings(out).slice(0, 8);
-}
-
-function inferContentStyle(row: CandidateRow) {
-  const cta = String(row.cta_style ?? "").toLowerCase();
-  if (cta === "consultative") return "consultative coaching-style content";
-  if (cta === "transactional") return "direct response offer-led content";
-  if (cta === "community") return "community and newsletter-led content";
-  if (cta === "inbound_dm") return "personal brand and DM-led conversion content";
-  return "educational creator content";
-}
-
-function gatherPlatforms(row: CandidateRow) {
-  const fromAccounts = asStringArray(row.platforms)
-    .map((x) => normalizePlatform(String(x)))
-    .filter((x): x is string => Boolean(x));
-  const fromLinks = asStringArray(row.outbound_socials)
-    .map((x) => platformFromUrl(String(x)))
-    .filter((x): x is string => Boolean(x));
-  return uniqStrings([...fromAccounts, ...fromLinks]);
 }
 
 function gatherSampleLinks(row: CandidateRow) {
@@ -267,15 +149,41 @@ async function fetchCandidates(input: z.infer<typeof bodySchema>): Promise<Candi
         jsonb_agg(distinct cia.platform) filter (where cia.platform is not null) as platforms,
         jsonb_agg(distinct cia.handle) filter (where cia.handle is not null) as handles,
         jsonb_agg(distinct cia.normalized_profile_url) filter (where cia.normalized_profile_url is not null) as profile_urls,
-        jsonb_agg(distinct cia.source_url) filter (where cia.source_url is not null) as source_urls
+        jsonb_agg(distinct cia.source_url) filter (where cia.source_url is not null) as source_urls,
+        jsonb_agg(distinct ra.title) filter (where ra.title is not null) as account_titles,
+        jsonb_agg(distinct ra.snippet) filter (where ra.snippet is not null) as account_snippets,
+        jsonb_agg(distinct ra.query) filter (where ra.query is not null) as account_queries
       from creator_identity_accounts cia
+      join raw_accounts ra on ra.id = cia.raw_account_id
       group by cia.creator_identity_id
+    ),
+    social_agg as (
+      select
+        csp.creator_identity_id,
+        jsonb_object_agg(
+          csp.platform,
+          jsonb_strip_nulls(
+            jsonb_build_object(
+              'followers', csp.followers_estimate,
+              'avg_views', csp.avg_views_estimate,
+              'engagement_rate', csp.engagement_rate_estimate,
+              'confidence', csp.extraction_confidence,
+              'sample_size', csp.sample_size,
+              'source', csp.source
+            )
+          )
+        ) filter (where csp.platform is not null and csp.platform <> 'unknown') as platform_metrics,
+        avg(csp.engagement_rate_estimate) filter (where csp.engagement_rate_estimate is not null) as estimated_engagement,
+        avg(csp.extraction_confidence) filter (where csp.extraction_confidence is not null) as avg_confidence
+      from creator_social_profiles csp
+      group by csp.creator_identity_id
     )
     select
       ci.id as creator_identity_id,
       ci.canonical_stan_slug,
       csp.stan_url,
       csp.bio_description,
+      csp.pricing_points,
       csp.product_types,
       csp.offers,
       csp.outbound_socials,
@@ -285,10 +193,17 @@ async function fetchCandidates(input: z.infer<typeof bodySchema>): Promise<Candi
       aa.handles,
       aa.profile_urls,
       aa.source_urls,
+      aa.account_titles,
+      aa.account_snippets,
+      aa.account_queries,
+      sa.platform_metrics as social_platform_metrics,
+      sa.estimated_engagement as social_estimated_engagement,
+      sa.avg_confidence as social_avg_confidence,
       exists(select 1 from creators c where c.creator_identity_id = ci.id) as already_imported
     from creator_identities ci
     left join creator_stan_profiles csp on csp.creator_identity_id = ci.id
     left join account_agg aa on aa.creator_identity_id = ci.id
+    left join social_agg sa on sa.creator_identity_id = ci.id
     ${where.length ? `where ${where.join(" and ")}` : ""}
     order by coalesce(csp.updated_at, csp.enriched_at, ci.updated_at, ci.created_at) desc
     limit ${limitRef}
@@ -325,6 +240,14 @@ export async function POST(req: Request) {
     reason?: string;
     niche?: string;
     name?: string;
+    signals?: {
+      confidence: number;
+      nicheConfidence: number;
+      buyingIntentScore: number;
+      primaryPlatform: string | null;
+      topTopics: string[];
+      intentSignals: string[];
+    };
   }> = [];
 
   for (const row of rows) {
@@ -340,22 +263,67 @@ export async function POST(req: Request) {
     }
 
     const name = displayNameForCandidate(row);
-    const inferred = inferNicheAndTopics(row);
-    const products = inferProducts(row);
-    const platforms = gatherPlatforms(row);
+    const signals = extractCompatibilitySignals({
+      canonicalStanSlug: row.canonical_stan_slug,
+      bioDescription: row.bio_description,
+      offers: asStringArray(row.offers),
+      pricingPoints: asStringArray(row.pricing_points),
+      productTypes: asStringArray(row.product_types),
+      outboundSocials: asStringArray(row.outbound_socials),
+      ctaStyle: row.cta_style,
+      accountTitles: asStringArray(row.account_titles),
+      accountSnippets: asStringArray(row.account_snippets),
+      accountQueries: asStringArray(row.account_queries),
+      accountPlatforms: asStringArray(row.platforms),
+      profileUrls: asStringArray(row.profile_urls),
+      sourceUrls: asStringArray(row.source_urls),
+      socialPlatformMetrics: asObject(row.social_platform_metrics),
+      socialEstimatedEngagement: row.social_estimated_engagement,
+      stanConfidence: row.extracted_confidence,
+      socialConfidence: row.social_avg_confidence,
+    });
+
+    const products = signals.productsSold;
+    const platforms = signals.platforms;
     const sampleLinks = gatherSampleLinks(row);
-    const contentStyle = inferContentStyle(row);
+    const contentStyle = signals.contentStyle;
     const creatorId = creatorIdForIdentity(row.creator_identity_id);
     const nowIso = new Date().toISOString();
+    const socialAvgConfidence =
+      typeof row.social_avg_confidence === "number" && Number.isFinite(row.social_avg_confidence)
+        ? Number(row.social_avg_confidence.toFixed(4))
+        : null;
+    const estimatedEngagement =
+      typeof signals.estimatedEngagement === "number" && Number.isFinite(signals.estimatedEngagement)
+        ? signals.estimatedEngagement
+        : null;
 
     const metrics = {
-      top_topics: uniqStrings([...inferred.topics, ...products]).slice(0, 8),
-      platform_metrics: {},
+      top_topics: signals.topTopics,
+      platform_metrics: signals.platformMetrics,
+      compatibility_signals: {
+        niche_confidence: signals.nicheConfidence,
+        buying_intent_score: signals.buyingIntentScore,
+        selling_style: signals.sellingStyle,
+        intent_signals: signals.intentSignals,
+        match_topics: signals.topTopics,
+        audience_signals: signals.audienceTypes,
+        primary_platform: signals.primaryPlatform,
+        confidence: signals.confidence,
+        evidence: signals.evidence,
+      },
+      social_performance: {
+        avg_confidence: socialAvgConfidence,
+        platforms: Object.keys(signals.platformMetrics).length,
+        primary_platform: signals.primaryPlatform,
+      },
       import_meta: {
         source: "stan_pipeline",
         creator_identity_id: row.creator_identity_id,
         canonical_stan_slug: row.canonical_stan_slug,
         extracted_confidence: row.extracted_confidence ?? null,
+        social_avg_confidence: socialAvgConfidence,
+        compatibility_confidence: signals.confidence,
         imported_at: nowIso,
       },
     };
@@ -389,13 +357,13 @@ export async function POST(req: Request) {
           creatorId,
           row.creator_identity_id,
           name,
-          inferred.niche,
+          signals.niche,
           JSON.stringify(platforms),
-          JSON.stringify(inferred.audiences),
+          JSON.stringify(signals.audienceTypes),
           contentStyle,
           JSON.stringify(products),
           JSON.stringify(sampleLinks),
-          null,
+          estimatedEngagement,
           JSON.stringify(metrics),
         ]
       );
@@ -408,7 +376,15 @@ export async function POST(req: Request) {
         creatorId,
         status: "updated",
         name,
-        niche: inferred.niche,
+        niche: signals.niche,
+        signals: {
+          confidence: signals.confidence,
+          nicheConfidence: signals.nicheConfidence,
+          buyingIntentScore: signals.buyingIntentScore,
+          primaryPlatform: signals.primaryPlatform,
+          topTopics: signals.topTopics.slice(0, 6),
+          intentSignals: signals.intentSignals,
+        },
       });
     } else {
       stats.imported += 1;
@@ -417,7 +393,15 @@ export async function POST(req: Request) {
         creatorId,
         status: "imported",
         name,
-        niche: inferred.niche,
+        niche: signals.niche,
+        signals: {
+          confidence: signals.confidence,
+          nicheConfidence: signals.nicheConfidence,
+          buyingIntentScore: signals.buyingIntentScore,
+          primaryPlatform: signals.primaryPlatform,
+          topTopics: signals.topTopics.slice(0, 6),
+          intentSignals: signals.intentSignals,
+        },
       });
     }
   }

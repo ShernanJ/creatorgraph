@@ -14,7 +14,16 @@ const SOCIAL_DOMAINS = new Set([
   "instagram.com",
   "linkedin.com",
   "tiktok.com",
+  "youtube.com",
+  "youtu.be",
   "stan.store",
+]);
+
+const EXCLUDED_DISCOVERY_DOMAINS = new Set([
+  "google.com",
+  "serpapi.com",
+  "gstatic.com",
+  "ytimg.com",
 ]);
 
 function initStats(): IdentityResolutionStats {
@@ -63,14 +72,14 @@ function extractPersonalDomainFromText(input: string): string | null {
   const urls = extractUrlsFromText(input);
   for (const u of urls) {
     const h = urlHost(u);
-    if (!h || SOCIAL_DOMAINS.has(h)) continue;
+    if (!h || SOCIAL_DOMAINS.has(h) || EXCLUDED_DISCOVERY_DOMAINS.has(h)) continue;
     return h;
   }
 
   const bare = input.match(/\b([a-z0-9-]+\.[a-z]{2,})(?:\/[^\s]*)?/i);
   if (!bare?.[1]) return null;
   const host = normalizeDomain(bare[1]);
-  if (!host || SOCIAL_DOMAINS.has(host)) return null;
+  if (!host || SOCIAL_DOMAINS.has(host) || EXCLUDED_DISCOVERY_DOMAINS.has(host)) return null;
   return host;
 }
 
@@ -111,12 +120,27 @@ async function createIdentity(args: {
   personalDomain?: string | null;
 }) {
   const id = `ci_${nanoid(10)}`;
-  await q(
-    `insert into creator_identities (id, canonical_stan_slug, canonical_personal_domain)
-     values ($1,$2,$3)`,
-    [id, args.stanSlug ?? null, args.personalDomain ?? null]
-  );
-  return id;
+  try {
+    await q(
+      `insert into creator_identities (id, canonical_stan_slug, canonical_personal_domain)
+       values ($1,$2,$3)`,
+      [id, args.stanSlug ?? null, args.personalDomain ?? null]
+    );
+    return id;
+  } catch (err: any) {
+    if (String(err?.code) !== "23505") throw err;
+
+    if (args.stanSlug) {
+      const existing = await findIdentityByStanSlug(args.stanSlug);
+      if (existing) return existing;
+    }
+    if (args.personalDomain) {
+      const existing = await findIdentityByDomain(args.personalDomain);
+      if (existing) return existing;
+    }
+
+    throw err;
+  }
 }
 
 async function linkAccount(args: {
