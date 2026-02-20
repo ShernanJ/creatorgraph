@@ -105,6 +105,38 @@ create index if not exists idx_raw_accounts_stan_slug on raw_accounts(stan_slug)
 create unique index if not exists uniq_raw_accounts_run_query_url
 on raw_accounts(discovery_run_id, query, source_url);
 
+-- stage 2b: raw account extraction snapshots (iterative parser outputs)
+create table if not exists raw_account_extractions (
+  id text primary key,
+  raw_account_id text not null references raw_accounts(id) on delete cascade,
+  discovery_run_id text not null,
+  platform text,
+  extractor_version text not null default 'v1',
+  stan_url text,
+  stan_slug text,
+  all_stan_urls jsonb not null default '[]'::jsonb,
+  follower_count_estimate int,
+  platform_profile_url text,
+  platform_handle text,
+  instagram_profile_url text,
+  instagram_handle text,
+  extraction_confidence numeric not null default 0.5,
+  evidence jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique(raw_account_id, extractor_version)
+);
+
+create index if not exists idx_raw_account_extractions_run
+on raw_account_extractions(discovery_run_id);
+create index if not exists idx_raw_account_extractions_platform
+on raw_account_extractions(platform);
+create index if not exists idx_raw_account_extractions_stan_slug
+on raw_account_extractions(stan_slug);
+
+alter table raw_account_extractions
+add column if not exists all_stan_urls jsonb not null default '[]'::jsonb;
+
 -- stage 3: creator identity resolution
 create table if not exists creator_identities (
   id text primary key,
@@ -210,3 +242,26 @@ create index if not exists idx_creator_stan_profiles_identity
 on creator_stan_profiles(creator_identity_id);
 create index if not exists idx_creator_stan_profiles_slug
 on creator_stan_profiles(stan_slug);
+
+-- stage 5: social performance enrichment
+create table if not exists creator_social_profiles (
+  id text primary key,
+  creator_identity_id text not null references creator_identities(id) on delete cascade,
+  platform text not null,
+  followers_estimate int,
+  avg_views_estimate int,
+  engagement_rate_estimate numeric,
+  sample_size int not null default 0,
+  data_quality text not null default 'estimated',
+  source text not null default 'identity_graph',
+  extraction_confidence numeric not null default 0.4,
+  evidence jsonb not null default '{}'::jsonb,
+  enriched_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique(creator_identity_id, platform)
+);
+
+create index if not exists idx_creator_social_profiles_identity
+on creator_social_profiles(creator_identity_id);
+create index if not exists idx_creator_social_profiles_platform
+on creator_social_profiles(platform);

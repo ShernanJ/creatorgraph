@@ -1,11 +1,10 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { nanoid } from "nanoid";
 import { q } from "@/lib/db";
 import { normalizeSerpResult } from "./normalize";
 import type { DiscoveryCoverageReport, DiscoveryIngestInput, DiscoveryPlatform } from "./types";
 
 function emptyPlatformCounts(): Record<DiscoveryPlatform, number> {
-  return { x: 0, instagram: 0, linkedin: 0, tiktok: 0, unknown: 0 };
+  return { x: 0, instagram: 0, linkedin: 0, tiktok: 0, youtube: 0, unknown: 0 };
 }
 
 function pct(part: number, total: number) {

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { q } from "@/lib/db";
@@ -20,7 +19,7 @@ const ingestSchema = z.object({
 });
 
 function emptyPlatformCounts(): Record<DiscoveryPlatform, number> {
-  return { x: 0, instagram: 0, linkedin: 0, tiktok: 0, unknown: 0 };
+  return { x: 0, instagram: 0, linkedin: 0, tiktok: 0, youtube: 0, unknown: 0 };
 }
 
 function pct(part: number, total: number) {
