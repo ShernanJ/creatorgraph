@@ -28,6 +28,9 @@ type RankedCreator = {
     id: string;
     name: string;
     niche: string;
+    username?: string | null;
+    avatar_url?: string | null;
+    profile_photo_url?: string | null;
     platforms?: string[];
     sample_links?: string[];
     estimated_engagement?: number | null;
@@ -70,37 +73,49 @@ type CampaignPreferences = {
   updatedAt: string | null;
 };
 
-type OnboardingStep = "partnership" | "comp_model" | "budget" | "done";
+type RankingDirectives = {
+  campaignGoals: string[];
+  priorityNiches: string[];
+  priorityTopics: string[];
+  preferredPlatforms: string[];
+  updatedAt: string | null;
+};
 
-const ONBOARDING_PARTNERSHIP_REPLIES = [
-  "Sponsored Video",
-  "UGC Assets",
-  "Affiliate Sales",
-  "Ambassador Program",
-];
-
-const ONBOARDING_COMP_MODEL_REPLIES = [
-  "Flat Fee",
-  "Per 1k Views (CPM)",
-  "Revenue Share",
-  "Hybrid",
-];
-
-const ONBOARDING_BUDGET_REPLIES = [
-  "$100 per video",
-  "$250 per video",
-  "$500 per video",
-  "No fixed budget yet",
-];
+type ParsedIntentPatch = {
+  preferencePatch: Partial<CampaignPreferences>;
+  directivePatch: Partial<RankingDirectives>;
+  changes: string[];
+};
 
 const COMMON_CHAT_QUICK_REPLIES = [
   "Show top creator matches",
-  "Who fits around $100 per video?",
-  "Explain why these creators fit",
-  "I want to change my budget",
+  "I need UGC creators around $1 per 1k views",
+  "Prioritize gym influencers",
+  "Why do these creators fit?",
 ];
 
 const MAX_DECK_HISTORY = 7;
+const AGENT_LEFT_PX = 4;
+const AGENT_MOVE_MS = 320;
+const PLACEHOLDER_ROTATE_MS = 3400;
+const PLACEHOLDER_OUT_MS = 280;
+const PLACEHOLDER_GAP_MS = 70;
+const PLACEHOLDER_IN_MS = 340;
+
+type RectBox = {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+};
+
+type ChipMorphState = {
+  id: string;
+  text: string;
+  rect: RectBox;
+  phase: "origin" | "animating";
+  sourceKey: string | null;
+};
 
 function TypewriterText({
   text,
@@ -152,7 +167,16 @@ function TypewriterText({
   return (
     <p className="whitespace-pre-wrap text-[16px] sm:text-[17px] leading-[1.55] tracking-[-0.01em] text-white/95">
       {visible}
-      {!done ? <span className="typing-caret">|</span> : null}
+      {!done ? (
+        <>
+          <span className="typing-caret">|</span>
+          <span className="typing-trail-inline" aria-hidden="true">
+            <span />
+            <span />
+            <span />
+          </span>
+        </>
+      ) : null}
     </p>
   );
 }
@@ -165,16 +189,6 @@ function compactCount(n: number) {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
   return String(n);
-}
-
-function socialLabel(url: string) {
-  const lower = url.toLowerCase();
-  if (/(x\.com|twitter\.com)/.test(lower)) return "X";
-  if (/instagram\.com/.test(lower)) return "Instagram";
-  if (/linkedin\.com/.test(lower)) return "LinkedIn";
-  if (/tiktok\.com/.test(lower)) return "TikTok";
-  if (/(youtube\.com|youtu\.be)/.test(lower)) return "YouTube";
-  return "Social";
 }
 
 function followersTotal(c: RankedCreator["creator"]) {
@@ -222,6 +236,306 @@ function socialLinks(c: RankedCreator["creator"]) {
   const links = c.sample_links ?? [];
   return links.filter((l) =>
     /(x\.com|twitter\.com|instagram\.com|linkedin\.com|tiktok\.com|youtube\.com|youtu\.be)/i.test(l)
+  );
+}
+
+type PlatformKey = "instagram" | "tiktok" | "youtube" | "x" | "linkedin";
+
+type StanleyVariant = {
+  title: string;
+  glyph: string;
+  gradient: string;
+  assetKey: string;
+};
+
+const PLATFORM_ORDER: PlatformKey[] = ["instagram", "tiktok", "youtube", "x", "linkedin"];
+
+const PLATFORM_META: Record<PlatformKey, { label: string; short: string; badgeClass: string }> = {
+  instagram: {
+    label: "Instagram",
+    short: "IG",
+    badgeClass: "bg-[#f56040]/20 text-[#ffd8cf] ring-[#f56040]/40",
+  },
+  tiktok: {
+    label: "TikTok",
+    short: "TT",
+    badgeClass: "bg-[#22d3ee]/20 text-[#d6fbff] ring-[#22d3ee]/40",
+  },
+  youtube: {
+    label: "YouTube",
+    short: "YT",
+    badgeClass: "bg-[#ef4444]/22 text-[#ffe0e0] ring-[#ef4444]/40",
+  },
+  x: {
+    label: "X",
+    short: "X",
+    badgeClass: "bg-white/18 text-white ring-white/30",
+  },
+  linkedin: {
+    label: "LinkedIn",
+    short: "IN",
+    badgeClass: "bg-[#3b82f6]/22 text-[#dbeafe] ring-[#3b82f6]/45",
+  },
+};
+
+const STANLEY_VARIANTS: Array<[RegExp, StanleyVariant]> = [
+  [/fitness|wellness|nutrition|gym/i, {
+    title: "Athlete Stanley",
+    glyph: "FLX",
+    gradient: "linear-gradient(150deg,#2e5dd0 0%,#5a31c0 50%,#211c46 100%)",
+    assetKey: "fitness-coaching",
+  }],
+  [/finance|invest|real estate/i, {
+    title: "Analyst Stanley",
+    glyph: "ROI",
+    gradient: "linear-gradient(150deg,#1f5a70 0%,#2f6e93 45%,#1f2b4d 100%)",
+    assetKey: "money-strategy",
+  }],
+  [/beauty|skincare|fashion/i, {
+    title: "Style Stanley",
+    glyph: "GLW",
+    gradient: "linear-gradient(150deg,#8a3d7f 0%,#c95a83 45%,#3e234e 100%)",
+    assetKey: "beauty-skincare",
+  }],
+  [/business|ecommerce|marketing|creator monetization/i, {
+    title: "Operator Stanley",
+    glyph: "OPS",
+    gradient: "linear-gradient(150deg,#5d4a9e 0%,#5a6ddb 45%,#24243d 100%)",
+    assetKey: "growth-operator",
+  }],
+  [/ai|productivity|saas|study/i, {
+    title: "Tech Stanley",
+    glyph: "AI",
+    gradient: "linear-gradient(150deg,#265f86 0%,#3f7aa5 45%,#262b4a 100%)",
+    assetKey: "ai-productivity",
+  }],
+  [/life|mindset|mental/i, {
+    title: "Coach Stanley",
+    glyph: "ZEN",
+    gradient: "linear-gradient(150deg,#4a3b8f 0%,#7759b8 45%,#28244b 100%)",
+    assetKey: "life-coaching",
+  }],
+];
+
+const DEFAULT_STANLEY_VARIANT: StanleyVariant = {
+  title: "Core Stanley",
+  glyph: "STD",
+  gradient: "linear-gradient(150deg,#41477c 0%,#5b63a7 45%,#252942 100%)",
+  assetKey: "core-default",
+};
+
+function normalizePlatformKey(value: string): PlatformKey | null {
+  const lower = value.trim().toLowerCase();
+  if (!lower) return null;
+  if (lower.includes("insta")) return "instagram";
+  if (lower.includes("tiktok") || lower === "tt") return "tiktok";
+  if (lower.includes("youtube") || lower.includes("youtu") || lower === "yt") return "youtube";
+  if (lower === "x" || lower.includes("x.com") || lower.includes("twitter")) return "x";
+  if (lower.includes("linkedin") || lower === "in") return "linkedin";
+  return null;
+}
+
+function creatorPlatforms(c: RankedCreator["creator"]) {
+  const metricKeys = Object.keys(c.metrics?.platform_metrics ?? {});
+  const normalized = Array.from(
+    new Set(
+      [...(c.platforms ?? []), ...metricKeys]
+        .map((x) => normalizePlatformKey(String(x)))
+        .filter((x): x is PlatformKey => Boolean(x))
+    )
+  );
+  return PLATFORM_ORDER.filter((p) => normalized.includes(p));
+}
+
+function followersByPlatform(c: RankedCreator["creator"], platform: PlatformKey) {
+  const metrics = c.metrics?.platform_metrics ?? {};
+  const direct = metrics[platform];
+  if (direct?.followers && Number.isFinite(Number(direct.followers))) {
+    return Math.max(0, Math.round(Number(direct.followers)));
+  }
+
+  for (const [key, value] of Object.entries(metrics)) {
+    if (normalizePlatformKey(key) === platform && value?.followers) {
+      const n = Number(value.followers);
+      if (Number.isFinite(n) && n > 0) return Math.round(n);
+    }
+  }
+  return null;
+}
+
+function followerBandLabel(value: number | null) {
+  if (!value || value <= 0) return "~1k";
+  if (value >= 1_000_000) return `${Math.floor(value / 1_000_000)}M+`;
+  if (value >= 10_000) return `${Math.floor(value / 1_000)}k+`;
+  if (value >= 1_000) return `~${Math.round(value / 1_000)}k`;
+  return "~1k";
+}
+
+function sanitizeHandle(value: string) {
+  return value
+    .trim()
+    .replace(/^@+/, "")
+    .replace(/[^a-zA-Z0-9._-]/g, "")
+    .toLowerCase();
+}
+
+function handleFromUrl(link: string) {
+  try {
+    const parsed = new URL(link);
+    const host = parsed.hostname.toLowerCase();
+    const parts = parsed.pathname.split("/").filter(Boolean);
+    if (!parts.length) return null;
+
+    if (host.includes("stan.store")) {
+      return sanitizeHandle(parts[0] ?? "");
+    }
+
+    if (host.includes("linkedin.com") && parts[0] === "in") {
+      return sanitizeHandle(parts[1] ?? "");
+    }
+
+    if (host.includes("youtube.com") || host.includes("youtu.be")) {
+      if ((parts[0] ?? "").startsWith("@")) return sanitizeHandle((parts[0] ?? "").slice(1));
+      if (["channel", "c", "user", "@"].includes(parts[0] ?? "")) {
+        return sanitizeHandle(parts[1] ?? "");
+      }
+      return sanitizeHandle(parts[0] ?? "");
+    }
+
+    if (host.includes("tiktok.com") && (parts[0] ?? "").startsWith("@")) {
+      return sanitizeHandle((parts[0] ?? "").slice(1));
+    }
+
+    return sanitizeHandle(parts[0] ?? "");
+  } catch {
+    return null;
+  }
+}
+
+function slugFromName(name: string) {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "")
+    .slice(0, 24);
+}
+
+function creatorUsername(c: RankedCreator["creator"]) {
+  const explicit = sanitizeHandle(c.username ?? "");
+  if (explicit) return `@${explicit}`;
+
+  const socials = socialLinks(c);
+  for (const link of socials) {
+    const handle = handleFromUrl(link);
+    if (handle) return `@${handle}`;
+  }
+
+  const stan = stanLink(c);
+  const stanHandle = stan ? handleFromUrl(stan) : null;
+  if (stanHandle) return `@${stanHandle}`;
+
+  return `@${slugFromName(c.name)}`;
+}
+
+function stanSlug(link: string | null) {
+  if (!link) return null;
+  const handle = handleFromUrl(link);
+  return handle || null;
+}
+
+function stanleyVariantForNiche(niche: string): StanleyVariant {
+  const matched = STANLEY_VARIANTS.find(([re]) => re.test(niche));
+  return matched?.[1] ?? DEFAULT_STANLEY_VARIANT;
+}
+
+function profilePhotoUrl(c: RankedCreator["creator"]) {
+  return c.profile_photo_url ?? c.avatar_url ?? null;
+}
+
+function PlatformIcon({ platform }: { platform: PlatformKey }) {
+  const cls = "h-3.5 w-3.5";
+
+  if (platform === "instagram") {
+    return (
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" className={cls}>
+        <rect x="4.5" y="4.5" width="15" height="15" rx="4" stroke="currentColor" strokeWidth="1.8" />
+        <circle cx="12" cy="12" r="3.2" stroke="currentColor" strokeWidth="1.8" />
+        <circle cx="16.2" cy="7.8" r="1" fill="currentColor" />
+      </svg>
+    );
+  }
+
+  if (platform === "tiktok") {
+    return (
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" className={cls}>
+        <path
+          d="M14 4.5v8.3a3.6 3.6 0 1 1-2.5-3.4V6.2c1.1.9 2.4 1.4 3.8 1.5"
+          stroke="currentColor"
+          strokeWidth="1.9"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    );
+  }
+
+  if (platform === "youtube") {
+    return (
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" className={cls}>
+        <rect x="3.8" y="6.3" width="16.4" height="11.4" rx="3" stroke="currentColor" strokeWidth="1.8" />
+        <path d="M10 9.6l5.1 2.4-5.1 2.4V9.6z" fill="currentColor" />
+      </svg>
+    );
+  }
+
+  if (platform === "x") {
+    return (
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" className={cls}>
+        <path
+          d="M5 5h3.8l3.8 5.2L16.9 5H19l-5.4 6.7L19 19h-3.8l-4-5.5L7 19H5l5.7-7.2L5 5z"
+          fill="currentColor"
+        />
+      </svg>
+    );
+  }
+
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" className={cls}>
+      <rect x="4.8" y="4.8" width="14.4" height="14.4" rx="2.2" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M8.5 10.2V16M8.5 8V8.1M12 11.1V16M12 11.1c0-1.2.8-2 2-2s2 .8 2 2V16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function NicheStanleyPortrait({ niche }: { niche: string }) {
+  const variant = stanleyVariantForNiche(niche);
+  return (
+    <div
+      className="relative h-32 overflow-hidden rounded-2xl border border-white/15 ring-1 ring-white/10"
+      style={{ background: variant.gradient }}
+      data-robot-asset={`stanley-variants/${variant.assetKey}.png`}
+    >
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(200px_90px_at_10%_10%,rgba(255,255,255,0.28),transparent_62%)]" />
+      <div className="pointer-events-none absolute -right-6 -top-8 h-24 w-24 rounded-full bg-white/15 blur-2xl" />
+      <div className="relative flex h-full flex-col justify-between p-3">
+        <span className="inline-flex w-fit items-center rounded-full bg-black/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-white/85 ring-1 ring-white/25">
+          {variant.glyph}
+        </span>
+        <div className="flex items-end justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold text-white/95">{variant.title}</p>
+            <p className="text-[10px] text-white/70">stanley-variants/{variant.assetKey}.png</p>
+          </div>
+          <Image
+            src="/Stan-Lee-Agent.png"
+            alt={variant.title}
+            width={52}
+            height={52}
+            className="opacity-95 drop-shadow-[0_6px_12px_rgba(0,0,0,0.32)]"
+          />
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -320,48 +634,20 @@ function extractOptionQuickReplies(text: string) {
   return options.length >= 2 ? options : undefined;
 }
 
-function getOnboardingStep(prefs: CampaignPreferences): OnboardingStep {
-  if (!prefs.partnershipType) return "partnership";
-  if (!prefs.compensationModel) return "comp_model";
-  if (!prefs.budgetCaptured) return "budget";
-  return "done";
+function normalizePhrase(value: string) {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-function onboardingQuestion(step: OnboardingStep, brandName: string): Pick<Message, "text" | "quickReplies"> | null {
-  if (step === "partnership") {
-    return {
-      text:
-        `Great start for ${brandName}. ⚡\n\n` +
-        "1) What collaboration type do you want first?\n" +
-        "A) Sponsored Video\nB) UGC Assets\nC) Affiliate Sales\nD) Ambassador Program\n\n" +
-        "This sets the creator format I should prioritize.",
-      quickReplies: ONBOARDING_PARTNERSHIP_REPLIES,
-    };
+function uniqPhrases(values: string[]) {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of values) {
+    const normalized = normalizePhrase(raw);
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    out.push(normalized);
   }
-
-  if (step === "comp_model") {
-    return {
-      text:
-        "Perfect, next detail. ✅\n\n" +
-        "2) How do you want to compensate creators?\n" +
-        "A) Flat Fee\nB) Per 1k Views (CPM)\nC) Revenue Share\nD) Hybrid\n\n" +
-        "This helps me frame both shortlist logic and deal feasibility.",
-      quickReplies: ONBOARDING_COMP_MODEL_REPLIES,
-    };
-  }
-
-  if (step === "budget") {
-    return {
-      text:
-        "Last onboarding question. 🎯\n\n" +
-        "3) What payout target should I optimize for?\n" +
-        "A) $100 per video\nB) $250 per video\nC) $500 per video\nD) No fixed budget yet\n\n" +
-        "This lets me filter for creators that are actually viable for your deal range.",
-      quickReplies: ONBOARDING_BUDGET_REPLIES,
-    };
-  }
-
-  return null;
+  return out;
 }
 
 function inferInitialPreferences(brand: BrandView): CampaignPreferences {
@@ -389,6 +675,134 @@ function inferInitialPreferences(brand: BrandView): CampaignPreferences {
   };
 }
 
+function inferInitialDirectives(): RankingDirectives {
+  return {
+    campaignGoals: [],
+    priorityNiches: [],
+    priorityTopics: [],
+    preferredPlatforms: [],
+    updatedAt: null,
+  };
+}
+
+const GOAL_SIGNAL_PATTERNS: Array<{ label: string; pattern: RegExp }> = [
+  { label: "brand awareness", pattern: /\b(brand awareness|awareness|reach|top of funnel)\b/i },
+  { label: "direct sales", pattern: /\b(sales|revenue|conversion|conversions|purchase|checkout|roi)\b/i },
+  { label: "ugc content library", pattern: /\b(ugc|content library|creative asset|ad creative)\b/i },
+  { label: "app installs and signups", pattern: /\b(app installs?|installs?|downloads?|sign[- ]?ups?|activations?)\b/i },
+  { label: "qualified traffic", pattern: /\b(traffic|site visits?|landing page clicks?)\b/i },
+  { label: "lead generation", pattern: /\b(leads?|pipeline|demo requests?|booked demos?)\b/i },
+];
+
+const PRIORITY_STOPWORDS = new Set([
+  "any",
+  "best",
+  "better",
+  "content",
+  "creator",
+  "creators",
+  "influencer",
+  "influencers",
+  "more",
+  "someone",
+  "strong",
+  "stronger",
+  "top",
+]);
+
+const PRIORITY_NOISE_TOKENS = new Set([
+  "around",
+  "explain",
+  "find",
+  "fit",
+  "fits",
+  "give",
+  "match",
+  "matches",
+  "recommend",
+  "send",
+  "show",
+  "top",
+  "why",
+  "who",
+]);
+
+function detectCampaignGoals(text: string) {
+  return uniqPhrases(
+    GOAL_SIGNAL_PATTERNS.filter((entry) => entry.pattern.test(text)).map((entry) => entry.label)
+  );
+}
+
+function detectPreferredPlatforms(text: string) {
+  const found = new Set<PlatformKey>();
+  if (/\b(instagram|insta|ig)\b/i.test(text)) found.add("instagram");
+  if (/\b(tiktok|tt)\b/i.test(text)) found.add("tiktok");
+  if (/\b(youtube|yt|youtu\.be)\b/i.test(text)) found.add("youtube");
+  if (/\b(x\.com|twitter)\b/i.test(text) || /\bx\b/i.test(text)) found.add("x");
+  if (/\b(linkedin|li)\b/i.test(text)) found.add("linkedin");
+  return PLATFORM_ORDER.filter((platform) => found.has(platform));
+}
+
+function sanitizePriorityPhrase(raw: string) {
+  const normalized = normalizePhrase(raw)
+    .replace(/^(for|about|around|the|some|more|mostly|with)\s+/, "")
+    .replace(/\s+(for|audiences?|content|profiles?)$/, "")
+    .trim();
+
+  if (!normalized || normalized.length < 3) return null;
+  if (PRIORITY_STOPWORDS.has(normalized)) return null;
+  const tokens = normalized.split(/\s+/);
+  if (tokens.some((token) => PRIORITY_NOISE_TOKENS.has(token))) return null;
+  return normalized;
+}
+
+function extractPriorityMatches(text: string, pattern: RegExp) {
+  const found: string[] = [];
+  let match = pattern.exec(text);
+  while (match) {
+    const phrase = match[1] ?? "";
+    const chunks = phrase.split(/,|\/|&|\band\b/gi);
+    for (const chunk of chunks) {
+      const cleaned = sanitizePriorityPhrase(chunk);
+      if (cleaned) found.push(cleaned);
+    }
+    match = pattern.exec(text);
+  }
+  return found;
+}
+
+function detectPriorityNiches(text: string) {
+  const patterns = [
+    /\b(?:looking for|look for|need|want|seeking|searching for|priorit(?:ize|ise)|focus(?:ing)? on|lean(?:ing)? into)\s+([a-z0-9][a-z0-9\s,&\/+\-]{1,56}?)\s+(?:influencers|creators)\b/gi,
+    /\b([a-z0-9][a-z0-9\s,&\/+\-]{1,36}?)\s+(?:influencers|creators)\b/gi,
+  ];
+
+  const matches: string[] = [];
+  for (const pattern of patterns) {
+    matches.push(...extractPriorityMatches(text, pattern));
+  }
+  return uniqPhrases(matches).slice(0, 6);
+}
+
+function detectPriorityTopics(text: string, priorityNiches: string[]) {
+  const topicHints: string[] = [...priorityNiches];
+  const topicPattern =
+    /\b(?:content about|topics around|focus on topics|covering)\s+([a-z0-9][a-z0-9\s,&\/+\-]{1,56})(?=$|[.!?,])/gi;
+
+  let match = topicPattern.exec(text);
+  while (match) {
+    const phrase = match[1] ?? "";
+    const chunks = phrase.split(/,|\/|&|\band\b/gi);
+    for (const chunk of chunks) {
+      const cleaned = sanitizePriorityPhrase(chunk);
+      if (cleaned) topicHints.push(cleaned);
+    }
+    match = topicPattern.exec(text);
+  }
+
+  return uniqPhrases(topicHints).slice(0, 8);
+}
+
 function brandSummaryText(brand: BrandView) {
   const category = brand.category ?? "digital";
   const goal = brand.goals[0] ?? "drive measurable campaign outcomes";
@@ -408,45 +822,74 @@ function brandSummaryText(brand: BrandView) {
   );
 }
 
-function parsePreferencePatch(text: string) {
-  const patch: Partial<CampaignPreferences> = {};
+function mergeDirectiveValues(existing: string[], patch: string[] | undefined) {
+  if (!patch?.length) return existing;
+  return uniqPhrases([...existing, ...patch]);
+}
+
+function parseIntentPatch(text: string): ParsedIntentPatch {
+  const preferencePatch: Partial<CampaignPreferences> = {};
+  const directivePatch: Partial<RankingDirectives> = {};
   const normalized = text.toLowerCase();
   const changes: string[] = [];
 
   const partnershipType = detectPartnershipType(normalized);
   if (partnershipType) {
-    patch.partnershipType = partnershipType;
+    preferencePatch.partnershipType = partnershipType;
     changes.push(`collaboration type: ${partnershipLabel(partnershipType)}`);
   }
 
   const compensationModel = detectCompensationModel(normalized);
   if (compensationModel) {
-    patch.compensationModel = compensationModel;
+    preferencePatch.compensationModel = compensationModel;
     changes.push(`comp model: ${compensationModelLabel(compensationModel)}`);
     if (compensationModel === "cpm" && !detectCompensationUnit(normalized)) {
-      patch.compensationUnit = "per_1k_views";
+      preferencePatch.compensationUnit = "per_1k_views";
     }
   }
 
   const compensationUnit = detectCompensationUnit(normalized);
   if (compensationUnit) {
-    patch.compensationUnit = compensationUnit;
+    preferencePatch.compensationUnit = compensationUnit;
   }
 
   if (/no fixed budget|no budget|open budget|flexible budget|budget tbd/i.test(normalized)) {
-    patch.compensationAmount = null;
-    patch.budgetCaptured = true;
+    preferencePatch.compensationAmount = null;
+    preferencePatch.budgetCaptured = true;
     changes.push("budget: no fixed cap");
   } else {
     const amount = extractBudgetAmount(text);
     if (amount !== null) {
-      patch.compensationAmount = amount;
-      patch.budgetCaptured = true;
+      preferencePatch.compensationAmount = amount;
+      preferencePatch.budgetCaptured = true;
       changes.push(`budget: $${amount}`);
     }
   }
 
-  return { patch, changes };
+  const campaignGoals = detectCampaignGoals(normalized);
+  if (campaignGoals.length) {
+    directivePatch.campaignGoals = campaignGoals;
+    changes.push(`goal: ${campaignGoals.slice(0, 2).join(" + ")}`);
+  }
+
+  const preferredPlatforms = detectPreferredPlatforms(normalized);
+  if (preferredPlatforms.length) {
+    directivePatch.preferredPlatforms = preferredPlatforms;
+    changes.push(`platform priority: ${preferredPlatforms.join(", ")}`);
+  }
+
+  const priorityNiches = detectPriorityNiches(text);
+  if (priorityNiches.length) {
+    directivePatch.priorityNiches = priorityNiches;
+    changes.push(`niche priority: ${priorityNiches.slice(0, 2).join(", ")}`);
+  }
+
+  const priorityTopics = detectPriorityTopics(text, priorityNiches);
+  if (priorityTopics.length) {
+    directivePatch.priorityTopics = priorityTopics;
+  }
+
+  return { preferencePatch, directivePatch, changes };
 }
 
 function budgetFilter(rows: RankedCreator[], budget: number) {
@@ -509,9 +952,9 @@ const THINKING_STATUS_LINES = [
 ];
 
 const PREFERENCE_SYNC_STATUS_LINES = [
-  "Updating campaign preferences...",
+  "Updating campaign intent and priorities...",
   "Recomputing creator shortlist with new constraints...",
-  "Refreshing deal-feasible matches...",
+  "Refreshing compatibility scores with your niche boosts...",
 ];
 
 function CreatorCardsGrid({ cards }: { cards: RankedCreator[] }) {
@@ -522,99 +965,131 @@ function CreatorCardsGrid({ cards }: { cards: RankedCreator[] }) {
         const followers = followersTotal(c);
         const p = estimatedPrice(c);
         const stan = stanLink(c);
-        const socials = socialLinks(c);
+        const stanSlugValue = stanSlug(stan);
+        const user = creatorUsername(c);
+        const platforms = creatorPlatforms(c).slice(0, 4);
+        const photoUrl = profilePhotoUrl(c);
         const topics = (c.metrics?.top_topics ?? []).slice(0, 3);
+
         return (
           <article
             key={`${c.id}-${index}`}
-            className="creator-card-in group rounded-2xl border border-white/15 bg-[linear-gradient(155deg,rgba(255,255,255,0.14),rgba(255,255,255,0.05)_46%,rgba(12,14,22,0.24))] p-4 shadow-[0_10px_32px_rgba(5,7,12,0.35)] backdrop-blur-md transition hover:-translate-y-[1px] hover:border-white/25 hover:shadow-[0_14px_36px_rgba(5,7,12,0.45)] space-y-3"
+            className="creator-card-in group relative overflow-hidden rounded-[22px] border border-white/15 bg-[linear-gradient(165deg,#4f4a66_0%,#343549_55%,#242636_100%)] p-3 shadow-[0_12px_32px_rgba(8,10,18,0.42)] backdrop-blur-md transition hover:-translate-y-[1px] hover:border-white/25 hover:shadow-[0_14px_36px_rgba(5,7,12,0.5)]"
             style={{ animationDelay: `${index * 85}ms` }}
           >
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-start gap-2">
-                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white/12 text-[11px] font-bold uppercase ring-1 ring-white/20">
-                  {c.name.slice(0, 2)}
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(280px_140px_at_0%_0%,rgba(199,158,255,0.24),transparent_62%)]" />
+            <div className="relative space-y-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-white/95">{user}</p>
+                  {stanSlugValue ? (
+                    <a
+                      href={`https://stan.store/${stanSlugValue}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="truncate text-[11px] text-violet-200/90 underline underline-offset-4 transition hover:text-violet-100"
+                    >
+                      stan.store/{stanSlugValue}
+                    </a>
+                  ) : (
+                    <p className="text-[11px] text-white/45">no stan.store link</p>
+                  )}
                 </div>
-                <div>
-                  <p className="text-sm font-semibold">{c.name}</p>
-                  <p className="text-xs text-white/65">{c.niche}</p>
-                </div>
-              </div>
-              <span className="rounded-full bg-emerald-400/18 px-2.5 py-1 text-xs font-semibold text-emerald-100 ring-1 ring-emerald-200/30">
-                {formatPct(Number(r.score) || 0)} fit
-              </span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <div className="rounded-xl bg-black/25 px-3 py-2 ring-1 ring-white/10">
-                <p className="text-[11px] uppercase tracking-wide text-white/45">followers</p>
-                <p className="text-sm font-medium text-white/95">
-                  {followers ? compactCount(followers) : "—"}
-                </p>
-              </div>
-              <div className="rounded-xl bg-black/25 px-3 py-2 ring-1 ring-white/10">
-                <p className="text-[11px] uppercase tracking-wide text-white/45">est. price</p>
-                <p className="text-sm font-medium text-white/95">
-                  {p ? `$${compactCount(p)}/video` : "—"}
-                </p>
-              </div>
-            </div>
-
-            <p className="text-xs text-white/65">
-              platforms: {(c.platforms ?? []).join(", ") || "—"}
-            </p>
-
-            {topics.length ? (
-              <div className="flex flex-wrap gap-1.5">
-                {topics.map((topic) => (
-                  <span
-                    key={`${c.id}-${topic}`}
-                    className="rounded-full bg-white/8 px-2 py-1 text-[11px] text-white/80 ring-1 ring-white/10"
-                  >
-                    {topic}
+                <div className="flex flex-col items-end gap-1">
+                  <span className="rounded-full bg-emerald-400/18 px-2.5 py-1 text-[11px] font-semibold text-emerald-100 ring-1 ring-emerald-200/30">
+                    {formatPct(Number(r.score) || 0)}
                   </span>
-                ))}
+                  <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.08em] text-white/70 ring-1 ring-white/15">
+                    compat
+                  </span>
+                </div>
               </div>
-            ) : null}
 
-            <div className="flex flex-wrap gap-2 pt-1">
-              {stan ? (
-                <a
-                  href={stan}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="rounded-lg bg-white/12 px-2.5 py-1 text-xs ring-1 ring-white/20 hover:bg-white/20"
-                >
-                  stan.store
-                </a>
+              {photoUrl ? (
+                <div className="relative h-32 overflow-hidden rounded-2xl border border-white/15 ring-1 ring-white/10">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={photoUrl} alt={c.name} className="h-full w-full object-cover" loading="lazy" />
+                </div>
               ) : (
-                <span className="rounded-lg bg-white/5 px-2 py-1 text-xs text-white/50 ring-1 ring-white/10">
-                  no stan link
-                </span>
+                <NicheStanleyPortrait niche={c.niche} />
               )}
 
-              {socials.length ? (
-                socials.slice(0, 2).map((s) => (
-                  <a
-                    key={`${c.id}-${s}`}
-                    href={s}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="rounded-lg bg-white/12 px-2.5 py-1 text-xs ring-1 ring-white/20 hover:bg-white/20"
-                  >
-                    {socialLabel(s)}
-                  </a>
-                ))
-              ) : (
-                <span className="rounded-lg bg-white/5 px-2 py-1 text-xs text-white/50 ring-1 ring-white/10">
-                  no socials
+              <div className="flex items-center justify-between gap-2">
+                <span className="rounded-full bg-white/12 px-2.5 py-1 text-[11px] font-medium text-white/85 ring-1 ring-white/15">
+                  {c.niche}
                 </span>
-              )}
+                <span className="text-[11px] text-white/60">
+                  reach {followers ? compactCount(followers) : "—"}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-1.5">
+                {platforms.length ? (
+                  platforms.map((platform) => {
+                    const meta = PLATFORM_META[platform];
+                    const platformFollowers = followersByPlatform(c, platform);
+                    return (
+                      <div
+                        key={`${c.id}-${platform}`}
+                        className="flex items-center justify-between rounded-lg bg-black/25 px-2 py-1.5 ring-1 ring-white/12"
+                        title={meta.label}
+                      >
+                        <span className="inline-flex items-center gap-1.5">
+                          <span
+                            className={[
+                              "inline-flex h-5 w-5 items-center justify-center rounded-md ring-1",
+                              meta.badgeClass,
+                            ].join(" ")}
+                          >
+                            <PlatformIcon platform={platform} />
+                          </span>
+                          <span className="text-[10px] uppercase tracking-[0.07em] text-white/70">
+                            {meta.short}
+                          </span>
+                        </span>
+                        <span className="text-[10px] text-white/78">
+                          ({followerBandLabel(platformFollowers)})
+                        </span>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="col-span-2 rounded-lg bg-black/20 px-2 py-1.5 text-[10px] text-white/55 ring-1 ring-white/12">
+                    No platform data yet
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-xl bg-black/25 px-3 py-2 ring-1 ring-white/12">
+                  <p className="text-[10px] uppercase tracking-[0.09em] text-white/45">est. rate</p>
+                  <p className="text-sm font-medium text-white/95">
+                    {p ? `$${compactCount(p)}/video` : "—"}
+                  </p>
+                </div>
+                <div className="rounded-xl bg-black/25 px-3 py-2 ring-1 ring-white/12">
+                  <p className="text-[10px] uppercase tracking-[0.09em] text-white/45">next slot</p>
+                  <p className="text-sm font-medium text-white/95">coming soon</p>
+                </div>
+              </div>
+
+              {topics.length ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {topics.map((topic) => (
+                    <span
+                      key={`${c.id}-${topic}`}
+                      className="rounded-full bg-white/8 px-2 py-1 text-[10px] text-white/78 ring-1 ring-white/10"
+                    >
+                      {topic}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+
+              {r.reasons?.[0] ? (
+                <p className="text-[11px] leading-5 text-white/62">Why: {r.reasons[0]}</p>
+              ) : null}
             </div>
-
-            {r.reasons?.[0] ? (
-              <p className="text-[11px] leading-5 text-white/60">Why: {r.reasons[0]}</p>
-            ) : null}
           </article>
         );
       })}
@@ -633,6 +1108,9 @@ export default function BrandChatExperience({
   const [preferences, setPreferences] = React.useState<CampaignPreferences>(() =>
     inferInitialPreferences(brand)
   );
+  const [rankingDirectives, setRankingDirectives] = React.useState<RankingDirectives>(() =>
+    inferInitialDirectives()
+  );
   const [messages, setMessages] = React.useState<Message[]>([]);
   const [input, setInput] = React.useState("");
   const [sending, setSending] = React.useState(false);
@@ -643,18 +1121,45 @@ export default function BrandChatExperience({
   const [loadingCreators, setLoadingCreators] = React.useState(true);
   const [syncingPreferences, setSyncingPreferences] = React.useState(false);
   const [typingMessageId, setTypingMessageId] = React.useState<string | null>(null);
+  const [typingReadyMessageId, setTypingReadyMessageId] = React.useState<string | null>(null);
   const [processingLineIndex, setProcessingLineIndex] = React.useState(0);
   const [agentY, setAgentY] = React.useState(0);
   const [agentVisible, setAgentVisible] = React.useState(false);
+  const [agentParticlePos, setAgentParticlePos] = React.useState({ left: 0, top: 0 });
+  const [placeholderIndex, setPlaceholderIndex] = React.useState(0);
+  const placeholderRef = React.useRef("Message Stan-Lee");
+  const [animatedPlaceholder, setAnimatedPlaceholder] = React.useState("Message Stan-Lee");
+  const [outgoingPlaceholder, setOutgoingPlaceholder] = React.useState<string | null>(null);
+  const [placeholderIn, setPlaceholderIn] = React.useState(false);
+  const placeholderSwapTimerRef = React.useRef<number | null>(null);
+  const placeholderClearTimerRef = React.useRef<number | null>(null);
+  const placeholderInTimerRef = React.useRef<number | null>(null);
+  const [chipMorph, setChipMorph] = React.useState<ChipMorphState | null>(null);
   const [isHandoffEntering, setIsHandoffEntering] = React.useState(false);
   const sectionRef = React.useRef<HTMLElement | null>(null);
   const messageRefs = React.useRef<Record<string, HTMLDivElement | null>>({});
   const assistantMessageRefs = React.useRef<Record<string, HTMLDivElement | null>>({});
+  const thinkingAnchorRef = React.useRef<HTMLDivElement | null>(null);
   const pendingUserScrollIdRef = React.useRef<string | null>(null);
   const composerTextAreaRef = React.useRef<HTMLTextAreaElement | null>(null);
   const autoFollowRef = React.useRef(true);
   const lastAutoFollowMsRef = React.useRef(0);
   const hasShownTopMatchesRef = React.useRef(false);
+
+  const rectBoxToSection = React.useCallback(
+    (rect: Pick<DOMRect, "left" | "top" | "width" | "height">): RectBox | null => {
+      const section = sectionRef.current;
+      if (!section) return null;
+      const sectionRect = section.getBoundingClientRect();
+      return {
+        left: rect.left - sectionRect.left + section.scrollLeft,
+        top: rect.top - sectionRect.top + section.scrollTop,
+        width: rect.width,
+        height: rect.height,
+      };
+    },
+    []
+  );
 
   const latestAssistantMessageId = React.useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i -= 1) {
@@ -671,42 +1176,144 @@ export default function BrandChatExperience({
   }, [decks, activeDeckSignature]);
 
   const agentTargetMessageId = typingMessageId ?? latestAssistantMessageId;
-  const onboardingStep = getOnboardingStep(preferences);
-  const onboardingComplete = onboardingStep === "done";
-  const showProcessing = sending || loadingCreators || syncingPreferences;
+  const queueTypingMessage = React.useCallback((messageId: string) => {
+    setTypingReadyMessageId(null);
+    setTypingMessageId(messageId);
+  }, []);
+  const isAssistantTyping = Boolean(typingMessageId && typingReadyMessageId === typingMessageId);
+  const isStagingAssistantTyping = Boolean(
+    typingMessageId && typingReadyMessageId !== typingMessageId
+  );
+  const showProcessing =
+    sending || loadingCreators || syncingPreferences || isStagingAssistantTyping;
   const processingLines = loadingCreators
     ? INDEXING_STATUS_LINES
     : syncingPreferences
     ? PREFERENCE_SYNC_STATUS_LINES
     : THINKING_STATUS_LINES;
+  const shouldUseThinkingAnchor = showProcessing && !typingMessageId;
+
+  const composerPlaceholders = React.useMemo(() => {
+    if (showProcessing) return ["Stan-Lee is thinking..."];
+
+    const hasBudget = preferences.compensationAmount !== null;
+    const budgetHint = hasBudget
+      ? `${preferences.compensationAmount} ${compensationUnitLabel(preferences.compensationUnit)}`
+      : "no fixed budget";
+    const firstDeckCreator = activeDeck?.cards[0]?.creator?.name ?? null;
+    const topPriorityNiche = rankingDirectives.priorityNiches[0] ?? null;
+
+    if (activeDeck) {
+      return [
+        firstDeckCreator
+          ? `Try: "Why does ${firstDeckCreator} fit my brand?"`
+          : 'Try: "Why does this deck fit my brand?"',
+        topPriorityNiche
+          ? `Try: "Keep ${topPriorityNiche} creators as top priority"`
+          : 'Try: "Prioritize gym influencers"',
+        `Try: "Find a tighter set around ${budgetHint}"`,
+      ];
+    }
+
+    return [
+      `Try: "I need UGC creators around $1 per 1k views for ${brand.name}"`,
+      'Try: "Prioritize gym influencers on TikTok"',
+      `Try: "Find creators around ${budgetHint}"`,
+    ];
+  }, [
+    showProcessing,
+    brand.name,
+    preferences.compensationAmount,
+    preferences.compensationUnit,
+    activeDeck,
+    rankingDirectives.priorityNiches,
+  ]);
+
+  const composerPlaceholder = React.useMemo(() => {
+    const options = composerPlaceholders;
+    if (!options.length) return "Message Stan-Lee";
+    return options[placeholderIndex % options.length] ?? options[0];
+  }, [composerPlaceholders, placeholderIndex]);
+
+  React.useEffect(() => {
+    const next = composerPlaceholder || "Message Stan-Lee";
+    const current = placeholderRef.current;
+    if (next === current) return;
+
+    if (placeholderSwapTimerRef.current) {
+      window.clearTimeout(placeholderSwapTimerRef.current);
+      placeholderSwapTimerRef.current = null;
+    }
+    if (placeholderClearTimerRef.current) {
+      window.clearTimeout(placeholderClearTimerRef.current);
+      placeholderClearTimerRef.current = null;
+    }
+    if (placeholderInTimerRef.current) {
+      window.clearTimeout(placeholderInTimerRef.current);
+      placeholderInTimerRef.current = null;
+    }
+
+    setPlaceholderIn(false);
+    setOutgoingPlaceholder(current || null);
+
+    const swapDelay = current ? PLACEHOLDER_OUT_MS + PLACEHOLDER_GAP_MS : 0;
+    placeholderClearTimerRef.current = window.setTimeout(() => {
+      setOutgoingPlaceholder(null);
+      placeholderClearTimerRef.current = null;
+    }, current ? PLACEHOLDER_OUT_MS : 0);
+
+    placeholderSwapTimerRef.current = window.setTimeout(() => {
+      setAnimatedPlaceholder(next);
+      placeholderRef.current = next;
+      setPlaceholderIn(true);
+      placeholderSwapTimerRef.current = null;
+      placeholderInTimerRef.current = window.setTimeout(() => {
+        setPlaceholderIn(false);
+        placeholderInTimerRef.current = null;
+      }, PLACEHOLDER_IN_MS + 20);
+    }, swapDelay);
+  }, [composerPlaceholder]);
+
+  React.useEffect(() => {
+    return () => {
+      if (placeholderSwapTimerRef.current) window.clearTimeout(placeholderSwapTimerRef.current);
+      if (placeholderClearTimerRef.current) window.clearTimeout(placeholderClearTimerRef.current);
+      if (placeholderInTimerRef.current) window.clearTimeout(placeholderInTimerRef.current);
+    };
+  }, []);
 
   const isNearBottom = React.useCallback(() => {
-    const doc = document.documentElement;
-    return window.innerHeight + window.scrollY >= doc.scrollHeight - 130;
+    const section = sectionRef.current;
+    if (!section) return true;
+    return section.scrollTop + section.clientHeight >= section.scrollHeight - 130;
   }, []);
 
   const softScrollToBottom = React.useCallback(
     (force = false) => {
+      const section = sectionRef.current;
+      if (!section) return;
       if (!force && !autoFollowRef.current) return;
       const now = Date.now();
       if (!force && now - lastAutoFollowMsRef.current < 120) return;
       lastAutoFollowMsRef.current = now;
-      window.scrollTo({
-        top: document.documentElement.scrollHeight,
-        behavior: "smooth",
-      });
+      section.scrollTo({ top: section.scrollHeight, behavior: "smooth" });
     },
     []
   );
 
   const syncAgentPosition = React.useCallback(() => {
     const section = sectionRef.current;
-    if (!section || !agentTargetMessageId) {
+    if (!section) {
       setAgentVisible(false);
       return;
     }
 
-    const target = assistantMessageRefs.current[agentTargetMessageId];
+    const target = shouldUseThinkingAnchor
+      ? thinkingAnchorRef.current
+      : agentTargetMessageId
+      ? assistantMessageRefs.current[agentTargetMessageId]
+      : null;
+
     if (!target) {
       setAgentVisible(false);
       return;
@@ -715,9 +1322,12 @@ export default function BrandChatExperience({
     const sectionRect = section.getBoundingClientRect();
     const targetRect = target.getBoundingClientRect();
     const nextY = targetRect.top - sectionRect.top + section.scrollTop;
+    const nextTop = sectionRect.top + nextY - section.scrollTop;
+    const nextLeft = sectionRect.left + AGENT_LEFT_PX;
     setAgentY(Math.max(0, nextY));
+    setAgentParticlePos({ left: nextLeft, top: nextTop });
     setAgentVisible(true);
-  }, [agentTargetMessageId]);
+  }, [agentTargetMessageId, shouldUseThinkingAnchor]);
 
   const captureDeck = React.useCallback((cards: RankedCreator[], title: string, reason: string) => {
     if (!cards.length) return;
@@ -754,7 +1364,9 @@ export default function BrandChatExperience({
 
   React.useEffect(() => {
     const initialPrefs = inferInitialPreferences(brand);
+    const initialDirectives = inferInitialDirectives();
     setPreferences(initialPrefs);
+    setRankingDirectives(initialDirectives);
     setDecks([]);
     setActiveDeckSignature(null);
     setShowDeckInCenter(false);
@@ -765,24 +1377,17 @@ export default function BrandChatExperience({
       role: "assistant",
       text: brandSummaryText(brand),
     };
+    const kickoff: Message = {
+      id: "kickoff-intake",
+      role: "assistant",
+      text:
+        "You can give your full brief in one message. Include collaboration type, pay model, payout target, goal, and any creator priorities (for example: “prioritize gym influencers”). I’ll parse it and refresh matches immediately.",
+      quickReplies: COMMON_CHAT_QUICK_REPLIES,
+    };
 
-    const step = getOnboardingStep(initialPrefs);
-    const onboarding = onboardingQuestion(step, brand.name);
-    if (onboarding) {
-      const onboardingMsg: Message = {
-        id: "onboarding-initial",
-        role: "assistant",
-        text: onboarding.text,
-        quickReplies: onboarding.quickReplies,
-      };
-      setMessages([intro, onboardingMsg]);
-      setTypingMessageId("onboarding-initial");
-      return;
-    }
-
-    setMessages([intro]);
-    setTypingMessageId("intro");
-  }, [brand]);
+    setMessages([intro, kickoff]);
+    queueTypingMessage("kickoff-intake");
+  }, [brand, queueTypingMessage]);
 
   React.useEffect(() => {
     if (typeof window === "undefined") return;
@@ -828,7 +1433,7 @@ export default function BrandChatExperience({
               text: "I couldn't load creator matches right now. Try again in a moment.",
             },
           ]);
-          setTypingMessageId("err-load");
+          queueTypingMessage("err-load");
         }
       } finally {
         if (!cancelled) setLoadingCreators(false);
@@ -837,10 +1442,9 @@ export default function BrandChatExperience({
     return () => {
       cancelled = true;
     };
-  }, [brand.id]);
+  }, [brand.id, queueTypingMessage]);
 
   React.useEffect(() => {
-    if (!onboardingComplete) return;
     if (!ranked.length) return;
     if (typingMessageId) return;
     if (hasShownTopMatchesRef.current) return;
@@ -855,7 +1459,7 @@ export default function BrandChatExperience({
       preferences.compensationAmount !== null
         ? `Budget deck · $${preferences.compensationAmount} ${compensationUnitLabel(preferences.compensationUnit)}`
         : "Initial top-fit deck";
-    captureDeck(cardsToShow, deckTitle, "initial onboarding shortlist");
+    captureDeck(cardsToShow, deckTitle, "initial shortlist");
 
     const note =
       preferences.compensationAmount !== null
@@ -865,17 +1469,17 @@ export default function BrandChatExperience({
     const topMessage: Message = {
       id: `top-initial-${Date.now()}`,
       role: "assistant",
-      text: `You’re onboarded. I created your ${deckTitle.toLowerCase()}${note}. Use the deck rail to review, compare, or reopen it in center view.`,
+      text: `I created your ${deckTitle.toLowerCase()}${note}. If you want a tighter direction, type it naturally (example: “prioritize gym influencers” or “focus on TikTok creators”).`,
     };
     setMessages((prev) => [...prev, topMessage]);
-    setTypingMessageId(topMessage.id);
+    queueTypingMessage(topMessage.id);
   }, [
-    onboardingComplete,
     ranked,
     typingMessageId,
     preferences.compensationAmount,
     preferences.compensationUnit,
     captureDeck,
+    queueTypingMessage,
   ]);
 
   React.useEffect(() => {
@@ -888,16 +1492,35 @@ export default function BrandChatExperience({
   }, [showProcessing, processingLines.length, loadingCreators]);
 
   React.useEffect(() => {
+    setPlaceholderIndex(0);
+  }, [composerPlaceholders]);
+
+  React.useEffect(() => {
+    if (input.trim().length) return;
+    if (composerPlaceholders.length < 2) return;
+    const id = window.setInterval(() => {
+      if (outgoingPlaceholder || placeholderIn) return;
+      setPlaceholderIndex((prev) => (prev + 1) % composerPlaceholders.length);
+    }, PLACEHOLDER_ROTATE_MS);
+    return () => window.clearInterval(id);
+  }, [input, composerPlaceholders, outgoingPlaceholder, placeholderIn]);
+
+  React.useEffect(() => {
+    const section = sectionRef.current;
+    if (!section) return;
+
     const onViewportChange = () => {
       autoFollowRef.current = isNearBottom();
       syncAgentPosition();
     };
+
     onViewportChange();
     window.addEventListener("resize", onViewportChange);
-    window.addEventListener("scroll", onViewportChange, { passive: true });
+    section.addEventListener("scroll", onViewportChange, { passive: true });
+
     return () => {
       window.removeEventListener("resize", onViewportChange);
-      window.removeEventListener("scroll", onViewportChange);
+      section.removeEventListener("scroll", onViewportChange);
     };
   }, [isNearBottom, syncAgentPosition]);
 
@@ -906,13 +1529,65 @@ export default function BrandChatExperience({
   }, [syncAgentPosition, messages, typingMessageId]);
 
   React.useEffect(() => {
+    if (!typingMessageId) {
+      setTypingReadyMessageId(null);
+      return;
+    }
+
+    syncAgentPosition();
+    const rafId = window.requestAnimationFrame(() => syncAgentPosition());
+    const readyId = window.setTimeout(() => {
+      setTypingReadyMessageId(typingMessageId);
+    }, AGENT_MOVE_MS + 40);
+
+    return () => {
+      window.cancelAnimationFrame(rafId);
+      window.clearTimeout(readyId);
+    };
+  }, [typingMessageId, syncAgentPosition]);
+
+  React.useEffect(() => {
     const pendingId = pendingUserScrollIdRef.current;
     if (!pendingId) return;
+
+    const section = sectionRef.current;
+    if (!section) return;
+
     const node = messageRefs.current[pendingId];
     if (!node) return;
-    node.scrollIntoView({ behavior: "smooth", block: "start" });
+    const sectionRect = section.getBoundingClientRect();
+    const nodeRect = node.getBoundingClientRect();
+    const targetTop = nodeRect.top - sectionRect.top + section.scrollTop - 18;
+    section.scrollTo({ top: Math.max(0, targetTop), behavior: "smooth" });
     pendingUserScrollIdRef.current = null;
   }, [messages]);
+
+  React.useEffect(() => {
+    if (!chipMorph) return;
+
+    const node = messageRefs.current[chipMorph.id];
+    if (!node) return;
+
+    const bubble =
+      node.querySelector<HTMLElement>('[data-user-bubble="true"]') ?? node;
+    const targetRect = rectBoxToSection(bubble.getBoundingClientRect());
+    if (!targetRect) return;
+
+    const startId = window.setTimeout(() => {
+      setChipMorph((prev) =>
+        prev?.id === chipMorph.id ? { ...prev, rect: targetRect, phase: "animating" } : prev
+      );
+    }, 12);
+
+    const clearId = window.setTimeout(() => {
+      setChipMorph((prev) => (prev?.id === chipMorph.id ? null : prev));
+    }, 520);
+
+    return () => {
+      window.clearTimeout(startId);
+      window.clearTimeout(clearId);
+    };
+  }, [messages, chipMorph, rectBoxToSection]);
 
   React.useEffect(() => {
     const node = composerTextAreaRef.current;
@@ -924,11 +1599,18 @@ export default function BrandChatExperience({
     node.style.overflowY = node.scrollHeight > max ? "auto" : "hidden";
   }, [input]);
 
-  async function syncBrandPreferences(nextPrefs: CampaignPreferences): Promise<RankedCreator[] | null> {
+  async function syncBrandPreferences(
+    nextPrefs: CampaignPreferences,
+    nextDirectives: RankingDirectives
+  ): Promise<RankedCreator[] | null> {
     const hasAnyPreference =
       nextPrefs.partnershipType !== null ||
       nextPrefs.compensationModel !== null ||
-      nextPrefs.budgetCaptured;
+      nextPrefs.budgetCaptured ||
+      nextDirectives.campaignGoals.length > 0 ||
+      nextDirectives.preferredPlatforms.length > 0 ||
+      nextDirectives.priorityNiches.length > 0 ||
+      nextDirectives.priorityTopics.length > 0;
     if (!hasAnyPreference) return null;
 
     setSyncingPreferences(true);
@@ -944,6 +1626,8 @@ export default function BrandChatExperience({
             compensationModel: nextPrefs.compensationModel,
             compensationAmount: nextPrefs.compensationAmount,
             compensationUnit: nextPrefs.compensationUnit,
+            campaignGoals: nextDirectives.campaignGoals,
+            preferredPlatforms: nextDirectives.preferredPlatforms,
           },
         }),
       });
@@ -952,7 +1636,14 @@ export default function BrandChatExperience({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         cache: "no-store",
-        body: JSON.stringify({ brandId: brand.id }),
+        body: JSON.stringify({
+          brandId: brand.id,
+          rankingDirectives: {
+            priorityNiches: nextDirectives.priorityNiches,
+            priorityTopics: nextDirectives.priorityTopics,
+            preferredPlatforms: nextDirectives.preferredPlatforms,
+          },
+        }),
       });
       const data = await res.json().catch(() => ({}));
       if (Array.isArray(data?.ranked)) {
@@ -967,7 +1658,10 @@ export default function BrandChatExperience({
     return null;
   }
 
-  async function submitUserMessage(rawText: string) {
+  async function submitUserMessage(
+    rawText: string,
+    opts: { chipOriginRect?: RectBox; sourceKey?: string } = {}
+  ) {
     const text = rawText.trim();
     if (!text || sending) return;
 
@@ -977,48 +1671,65 @@ export default function BrandChatExperience({
       role: "user",
       text,
     };
-    pendingUserScrollIdRef.current = userMsgId;
+    pendingUserScrollIdRef.current = opts.chipOriginRect ? null : userMsgId;
+    if (opts.chipOriginRect) {
+      setChipMorph({
+        id: userMsgId,
+        text,
+        rect: opts.chipOriginRect,
+        phase: "origin",
+        sourceKey: opts.sourceKey ?? null,
+      });
+    }
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
     setSending(true);
 
     let nextPrefs = preferences;
-    const parsed = parsePreferencePatch(text);
-    const hasPreferenceUpdate = Object.keys(parsed.patch).length > 0;
+    let nextDirectives = rankingDirectives;
+    const parsed = parseIntentPatch(text);
+    const hasPreferenceUpdate = Object.keys(parsed.preferencePatch).length > 0;
+    const hasDirectiveUpdate = Object.keys(parsed.directivePatch).length > 0;
+    const hasIntentUpdate = hasPreferenceUpdate || hasDirectiveUpdate;
 
     if (hasPreferenceUpdate) {
       nextPrefs = {
         ...preferences,
-        ...parsed.patch,
+        ...parsed.preferencePatch,
         updatedAt: new Date().toISOString(),
       };
       setPreferences(nextPrefs);
     }
 
-    const nextStep = getOnboardingStep(nextPrefs);
+    if (hasDirectiveUpdate) {
+      nextDirectives = {
+        campaignGoals: mergeDirectiveValues(
+          rankingDirectives.campaignGoals,
+          parsed.directivePatch.campaignGoals
+        ),
+        priorityNiches: mergeDirectiveValues(
+          rankingDirectives.priorityNiches,
+          parsed.directivePatch.priorityNiches
+        ),
+        priorityTopics: mergeDirectiveValues(
+          rankingDirectives.priorityTopics,
+          parsed.directivePatch.priorityTopics
+        ),
+        preferredPlatforms: mergeDirectiveValues(
+          rankingDirectives.preferredPlatforms,
+          parsed.directivePatch.preferredPlatforms
+        ),
+        updatedAt: new Date().toISOString(),
+      };
+      setRankingDirectives(nextDirectives);
+    }
 
     try {
-      if (hasPreferenceUpdate) {
-        const refreshedRanked =
-          nextStep === "done" ? await syncBrandPreferences(nextPrefs) : null;
-        const rankedSource = refreshedRanked?.length ? refreshedRanked : ranked;
-        const summary = parsed.changes.length
-          ? `Updated ${parsed.changes.join(" · ")}. ✅`
-          : "Updated your campaign preferences. ✅";
+      let rankedSource = ranked;
 
-        if (nextStep !== "done") {
-          const followUp = onboardingQuestion(nextStep, brand.name);
-          const assistant: Message = {
-            id: `a-${Date.now()}`,
-            role: "assistant",
-            text: followUp ? `${summary}\n\n${followUp.text}` : summary,
-            quickReplies: followUp?.quickReplies,
-          };
-          setMessages((prev) => [...prev, assistant]);
-          setTypingMessageId(assistant.id);
-          return;
-        }
-
+      if (hasIntentUpdate) {
+        const refreshedRanked = await syncBrandPreferences(nextPrefs, nextDirectives);
+        if (refreshedRanked?.length) rankedSource = refreshedRanked;
         hasShownTopMatchesRef.current = true;
         const cardsForDeck =
           selectCardsForQuery(text, rankedSource, nextPrefs) ??
@@ -1029,34 +1740,26 @@ export default function BrandChatExperience({
           captureDeck(
             cardsForDeck,
             deckTitleFromContext(text, nextPrefs),
-            "preferences updated from chat"
+            "campaign intent updated from chat"
           );
         }
-        const assistant: Message = {
-          id: `a-${Date.now()}`,
-          role: "assistant",
-          text:
-            summary +
-            " I updated the active creator deck so you can compare this set against previous ones.",
-        };
-        setMessages((prev) => [...prev, assistant]);
-        setTypingMessageId(assistant.id);
-        return;
-      }
 
-      if (nextStep !== "done") {
-        const followUp = onboardingQuestion(nextStep, brand.name);
+        const summary = parsed.changes.length
+          ? `Updated ${parsed.changes.join(" · ")}. ✅`
+          : "Updated your campaign brief. ✅";
+        const priorityNote = nextDirectives.priorityNiches.length
+          ? " I boosted creators that match your priority niches without replacing your base dossier niche."
+          : " I refreshed your ranking with the latest constraints.";
+        const deckNote = cardsForDeck.length
+          ? " I updated the active deck so you can compare it with prior decks."
+          : " Creator cards are still loading, but your ranking directives were saved.";
         const assistant: Message = {
           id: `a-${Date.now()}`,
           role: "assistant",
-          text:
-            (followUp?.text ??
-              "I still need your campaign setup details before I can optimize your shortlist.") +
-            "\n\nTap an option below or type your own preference.",
-          quickReplies: followUp?.quickReplies,
+          text: `${summary}${priorityNote}${deckNote}`,
         };
         setMessages((prev) => [...prev, assistant]);
-        setTypingMessageId(assistant.id);
+        queueTypingMessage(assistant.id);
         return;
       }
 
@@ -1079,6 +1782,12 @@ export default function BrandChatExperience({
             compensationAmount: nextPrefs.compensationAmount,
             compensationUnit: nextPrefs.compensationUnit,
           },
+          rankingDirectives: {
+            campaignGoals: nextDirectives.campaignGoals,
+            preferredPlatforms: nextDirectives.preferredPlatforms,
+            priorityNiches: nextDirectives.priorityNiches,
+            priorityTopics: nextDirectives.priorityTopics,
+          },
         }),
       });
 
@@ -1088,7 +1797,7 @@ export default function BrandChatExperience({
           ? data.reply.trim()
           : "I can help with creator shortlist strategy, budget-fit options, or next-step campaign planning. Share what matters most right now.";
 
-      const cardsForDeck = selectCardsForQuery(text, ranked, nextPrefs) ?? [];
+      const cardsForDeck = selectCardsForQuery(text, rankedSource, nextPrefs) ?? [];
       if (cardsForDeck.length) {
         captureDeck(cardsForDeck, deckTitleFromContext(text, nextPrefs), "chat query");
       }
@@ -1103,7 +1812,7 @@ export default function BrandChatExperience({
       };
 
       setMessages((prev) => [...prev, assistant]);
-      setTypingMessageId(assistant.id);
+      queueTypingMessage(assistant.id);
     } catch {
       const fallback: Message = {
         id: `a-${Date.now()}`,
@@ -1113,7 +1822,7 @@ export default function BrandChatExperience({
         quickReplies: undefined,
       };
       setMessages((prev) => [...prev, fallback]);
-      setTypingMessageId(fallback.id);
+      queueTypingMessage(fallback.id);
     } finally {
       setSending(false);
     }
@@ -1125,7 +1834,7 @@ export default function BrandChatExperience({
   }
 
   return (
-    <main className={["min-h-screen w-full bg-[#2f3140] text-white", isHandoffEntering ? "cg-brand-enter" : ""].join(" ")}>
+    <main className={["h-screen w-full overflow-hidden bg-[#2f3140] text-white", isHandoffEntering ? "cg-brand-enter" : ""].join(" ")}>
       <div className="pointer-events-none fixed inset-0 -z-10">
         <div className="absolute inset-0 bg-[radial-gradient(1100px_650px_at_50%_40%,rgba(110,120,255,0.12),transparent_55%)]" />
         <div className="absolute inset-0 bg-[radial-gradient(900px_520px_at_50%_100%,rgba(130,70,255,0.10),transparent_60%)]" />
@@ -1134,7 +1843,7 @@ export default function BrandChatExperience({
 
       {isHandoffEntering ? <div className="pointer-events-none fixed inset-0 z-40 cg-brand-handoff-layer" /> : null}
 
-      <header className="fixed left-0 right-0 top-0 z-20 flex w-full items-start px-1 py-1 pr-2">
+      <header className="fixed left-0 right-0 top-0 z-40 flex w-full items-start px-1 py-1 pr-2">
         <div className="relative mx-auto w-full max-w-6xl">
           <div className="z-20 flex h-[42px] items-center">
             <button
@@ -1176,91 +1885,168 @@ export default function BrandChatExperience({
         </div>
       </header>
 
-      <section className="relative mx-auto w-full max-w-[1480px] px-4 pb-64 pt-20">
-        <section ref={sectionRef} className="relative mx-auto w-full max-w-3xl space-y-6">
+      <section className="relative mx-auto h-full w-full max-w-[1480px] px-4 pt-20">
+        <section
+          ref={sectionRef}
+          className="hide-scrollbar relative mx-auto h-[calc(100vh-80px)] w-full max-w-3xl space-y-6 overflow-y-auto pb-[220px]"
+        >
         <div
-          className="pointer-events-none absolute left-3 z-10 transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]"
+          className="pointer-events-none absolute z-10 will-change-transform"
           style={{
+            left: AGENT_LEFT_PX,
             opacity: agentVisible ? 1 : 0,
             transform: `translate3d(0, ${agentY}px, 0)`,
+            transition:
+              "transform 320ms cubic-bezier(0.16, 0.9, 0.25, 1), opacity 200ms ease-out",
           }}
         >
-          <Image
-            src="/Stan-Lee-Agent.png"
-            alt="Stan-Lee"
-            width={30}
-            height={30}
-            className={typingMessageId ? "agent-thinking" : "animate-floaty"}
-          />
+          <div className="relative">
+            <Image
+              src="/Stan-Lee-Agent.png"
+              alt="Stan-Lee"
+              width={40}
+              height={40}
+              className={typingMessageId ? "agent-thinking" : "animate-floaty"}
+            />
+            {showProcessing && agentVisible && !isAssistantTyping ? (
+              <div
+                key={`${loadingCreators ? "index" : syncingPreferences ? "pref" : "thinking"}-${processingLineIndex}`}
+                className="stan-thinking-bubble processing-pop absolute left-[48px] top-1"
+              >
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#bda9ff]" />
+                <span>{processingLines[processingLineIndex]}</span>
+              </div>
+            ) : null}
+          </div>
+        </div>
+        <div
+          className={[
+            "stan-writing-particles-overlay",
+            typingReadyMessageId && agentVisible ? "is-active" : "",
+          ].join(" ")}
+          style={{
+            left: agentParticlePos.left,
+            top: agentParticlePos.top,
+          }}
+          aria-hidden="true"
+        >
+          <span />
+          <span />
+          <span />
+          <span />
+          <span />
+          <span />
         </div>
 
-        {messages.map((m) => (
-          <div
-            key={m.id}
-            ref={(node) => {
-              messageRefs.current[m.id] = node;
-            }}
-            className={m.role === "user" ? "flex justify-end" : "flex justify-start"}
-          >
-            <div className={m.role === "user" ? "max-w-[85%]" : "w-full max-w-2xl pl-12"}>
-              {m.role === "assistant" ? (
-                <div
-                  ref={(node) => {
-                    assistantMessageRefs.current[m.id] = node;
-                  }}
-                  className="w-full"
-                >
-                  {typingMessageId === m.id ? (
-                    <TypewriterText
-                      text={m.text}
-                      speedMs={12}
-                      onTick={() => {
-                        syncAgentPosition();
-                        softScrollToBottom(false);
-                      }}
-                      onDone={() => {
-                        setTypingMessageId((current) => (current === m.id ? null : current));
-                        requestAnimationFrame(() => softScrollToBottom(false));
-                      }}
-                    />
-                  ) : (
-                    <p className="whitespace-pre-wrap text-[16px] leading-[1.55] tracking-[-0.01em] text-white/95 sm:text-[17px]">
-                      {m.text}
-                    </p>
-                  )}
-                </div>
-              ) : (
-                <div className="rounded-2xl bg-[linear-gradient(135deg,#505665,#60677a)] px-4 py-3 text-sm text-white">
-                  {m.text}
-                </div>
-              )}
+        {messages.map((m) => {
+          const morphTargetPhase = chipMorph?.id === m.id ? chipMorph.phase : null;
 
-              {(m.quickReplies?.length || m.id === latestAssistantMessageId) &&
-              typingMessageId !== m.id &&
-              m.id === latestAssistantMessageId ? (
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {(m.quickReplies?.length ? m.quickReplies : COMMON_CHAT_QUICK_REPLIES).map((reply, index) => (
-                    <button
-                      key={`${m.id}-${reply}`}
-                      type="button"
-                      disabled={sending}
-                      onClick={() => {
-                        void submitUserMessage(reply);
-                      }}
-                      className="chat-chip-pop rounded-full bg-white/10 px-3 py-1.5 text-xs text-white ring-1 ring-white/20 transition hover:bg-white/15 disabled:opacity-50"
-                      style={{ animationDelay: `${index * 55}ms` }}
-                    >
-                      {reply}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
+          return (
+            <div
+              key={m.id}
+              ref={(node) => {
+                messageRefs.current[m.id] = node;
+              }}
+              className={m.role === "user" ? "flex justify-end" : "flex justify-start"}
+            >
+              <div className={m.role === "user" ? "max-w-[85%]" : "w-full max-w-2xl pl-14"}>
+                {m.role === "assistant" ? (
+                  <div
+                    ref={(node) => {
+                      assistantMessageRefs.current[m.id] = node;
+                    }}
+                    className="w-full"
+                  >
+                    {typingMessageId === m.id && typingReadyMessageId === m.id ? (
+                      <TypewriterText
+                        text={m.text}
+                        speedMs={12}
+                        onTick={() => {
+                          syncAgentPosition();
+                          softScrollToBottom(false);
+                        }}
+                        onDone={() => {
+                          setTypingMessageId((current) => (current === m.id ? null : current));
+                          setTypingReadyMessageId((current) =>
+                            current === m.id ? null : current
+                          );
+                          requestAnimationFrame(() => softScrollToBottom(false));
+                        }}
+                      />
+                    ) : typingMessageId === m.id ? (
+                      <p aria-hidden="true" className="h-6" />
+                    ) : (
+                      <p className="whitespace-pre-wrap text-[16px] leading-[1.55] tracking-[-0.01em] text-white/95 sm:text-[17px]">
+                        {m.text}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <div
+                    data-user-bubble="true"
+                    data-morph-phase={morphTargetPhase ?? undefined}
+                    className={[
+                      "rounded-2xl bg-[linear-gradient(135deg,#505665,#60677a)] px-4 py-3 text-sm text-white",
+                      morphTargetPhase ? "chip-morph-target" : "",
+                    ].join(" ")}
+                  >
+                    {m.text}
+                  </div>
+                )}
+
+                {(m.quickReplies?.length || m.id === latestAssistantMessageId) &&
+                typingMessageId !== m.id &&
+                m.id === latestAssistantMessageId ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {(m.quickReplies?.length ? m.quickReplies : COMMON_CHAT_QUICK_REPLIES).map(
+                      (reply, index) => {
+                        const chipKey = `${m.id}-${index}-${reply}`;
+                        const isMorphSource = chipMorph?.sourceKey === chipKey;
+
+                        return (
+                          <button
+                            key={chipKey}
+                            type="button"
+                            disabled={sending}
+                            onClick={(e) => {
+                              const origin = rectBoxToSection(
+                                e.currentTarget.getBoundingClientRect()
+                              );
+                              if (!origin) {
+                                void submitUserMessage(reply);
+                                return;
+                              }
+                              void submitUserMessage(reply, {
+                                chipOriginRect: origin,
+                                sourceKey: chipKey,
+                              });
+                            }}
+                            className={[
+                              "chat-chip-pop cursor-pointer rounded-full bg-white/10 px-3 py-1.5 text-xs text-white ring-1 ring-white/20 transition duration-200 hover:-translate-y-[1px] hover:scale-[1.03] hover:bg-white/20 hover:ring-white/35 hover:shadow-[0_8px_20px_rgba(109,95,255,0.28)] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:scale-100 disabled:hover:bg-white/10 disabled:hover:shadow-none",
+                              isMorphSource ? "opacity-0" : "",
+                            ].join(" ")}
+                            style={{ animationDelay: `${index * 55}ms` }}
+                          >
+                            {reply}
+                          </button>
+                        );
+                      }
+                    )}
+                  </div>
+                ) : null}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
+
+        <div
+          ref={thinkingAnchorRef}
+          className="pointer-events-none ml-14 h-8 w-full"
+          aria-hidden="true"
+        />
 
         {showDeckInCenter && activeDeck ? (
-          <div className="ml-12 space-y-3 rounded-2xl border border-white/12 bg-white/[0.04] p-4">
+          <div className="ml-14 space-y-3 rounded-2xl border border-white/12 bg-white/[0.04] p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-sm font-semibold text-white/95">{activeDeck.title}</p>
@@ -1279,10 +2065,28 @@ export default function BrandChatExperience({
             <CreatorCardsGrid cards={activeDeck.cards} />
           </div>
         ) : null}
+
+        {chipMorph ? (
+          <div
+            aria-hidden="true"
+            className={[
+              "chip-morph-glass",
+              chipMorph.phase === "animating" ? "is-animating" : "",
+            ].join(" ")}
+            style={{
+              left: chipMorph.rect.left,
+              top: chipMorph.rect.top,
+              width: chipMorph.rect.width,
+              height: chipMorph.rect.height,
+            }}
+          >
+            <span className="truncate px-3 text-xs font-medium text-white/95">{chipMorph.text}</span>
+          </div>
+        ) : null}
         </section>
 
         <aside className="pointer-events-none hidden min-[1450px]:block">
-          <div className="pointer-events-auto fixed right-6 top-20 w-[320px] rounded-2xl border border-white/12 bg-white/[0.04] p-4">
+          <div className="pointer-events-auto fixed right-6 top-20 z-30 w-[320px] rounded-2xl border border-white/12 bg-white/[0.04] p-4">
             <div className="mb-3 flex items-center justify-between gap-2">
               <p className="text-sm font-semibold text-white/95">Creator Decks</p>
               <button
@@ -1330,7 +2134,7 @@ export default function BrandChatExperience({
                 <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-white/50">
                   Active deck preview
                 </p>
-                <div className="max-h-[340px] space-y-2 overflow-y-auto pr-1">
+                <div className="hide-scrollbar max-h-[340px] space-y-2 overflow-y-auto">
                   {activeDeck.cards.slice(0, 6).map((item) => (
                     <div
                       key={`preview-${activeDeck.id}-${item.creator.id}`}
@@ -1352,18 +2156,6 @@ export default function BrandChatExperience({
         </aside>
       </section>
 
-      {showProcessing ? (
-        <div className="pointer-events-none fixed bottom-[170px] left-1/2 z-30 -translate-x-1/2 sm:bottom-[160px]">
-          <div
-            key={`${loadingCreators ? "index" : "thinking"}-${processingLineIndex}`}
-            className="processing-pop flex items-center gap-2 rounded-full border border-white/20 bg-[#3b4255]/90 px-4 py-1.5 text-xs text-white/90 shadow-[0_10px_28px_rgba(0,0,0,0.32)] backdrop-blur-md"
-          >
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#aeb9ff]" />
-            <span>{processingLines[processingLineIndex]}</span>
-          </div>
-        </div>
-      ) : null}
-
       <div className="fixed inset-x-0 bottom-0 z-30 pointer-events-none pb-[calc(env(safe-area-inset-bottom)+16px)]">
         <div className="mx-auto flex w-full max-w-3xl flex-col px-3 pb-5 pt-4 pointer-events-auto sm:px-4">
           <div className="order-1 rounded-2xl border border-gray-700 bg-[#40414f]/80 px-4 py-4 backdrop-blur-md transition-all duration-300 focus-within:scale-[1.01] focus-within:border-gray-600">
@@ -1382,6 +2174,27 @@ export default function BrandChatExperience({
               </div>
 
               <div className="relative w-full flex-1">
+                {input.trim().length === 0 ? (
+                  <div
+                    aria-hidden="true"
+                    className="pointer-events-none absolute inset-x-0 top-1 overflow-hidden"
+                  >
+                    {outgoingPlaceholder ? (
+                      <span className="composer-placeholder composer-placeholder-out">
+                        {outgoingPlaceholder}
+                      </span>
+                    ) : null}
+                    <span
+                      key={animatedPlaceholder}
+                      className={[
+                        "composer-placeholder",
+                        placeholderIn ? "composer-placeholder-in" : "",
+                      ].join(" ")}
+                    >
+                      {animatedPlaceholder}
+                    </span>
+                  </div>
+                ) : null}
                 <textarea
                   ref={composerTextAreaRef}
                   value={input}
@@ -1393,8 +2206,9 @@ export default function BrandChatExperience({
                     }
                   }}
                   rows={1}
-                  placeholder="What are we creating today?"
-                  className="min-h-[24px] max-h-[280px] w-full resize-none bg-transparent px-0 py-1 text-base font-medium tracking-tight text-gray-100 placeholder-gray-400 outline-none"
+                  aria-label="Message Stan-Lee"
+                  placeholder=""
+                  className="min-h-[24px] max-h-[280px] w-full resize-none bg-transparent px-0 py-1 text-base font-medium tracking-tight text-gray-100 placeholder-transparent outline-none"
                 />
               </div>
 

@@ -101,31 +101,37 @@ export type StanLeeChatPromptInput = {
     compensationAmount: number | null;
     compensationUnit: string | null;
   };
+  rankingDirectives?: {
+    campaignGoals?: string[];
+    preferredPlatforms?: string[];
+    priorityNiches?: string[];
+    priorityTopics?: string[];
+  };
 };
 
 export const stanLeeChatSystemPrompt = `
 Role: Stan-Lee - an AI Coach helping Brands launch creator partnerships on Stan.
 
-Core Job: collect brand campaign intent with personalized questions while being useful right now.
+Core Job: help the brand move faster with useful answers while collecting any missing constraints naturally.
 You are a Brand-focused sibling of Stanley (creator agent): same warmth and clarity, different audience.
 
 Context: this product is CreatorGraph MVP. Brand URL is crawled, dossier is generated, creators are ranked.
 Use only provided context. Never fabricate crawl evidence, creator stats, or match reasons.
 
 Main Task:
-- Keep moving a lightweight 5-question intake when details are missing:
-  objective, why-now, target audience, creator profile, budget/constraints.
+- Treat each user message as potentially complete intake (even if it is a single long message).
+- Parse and reflect concrete constraints when present: partnership model, compensation model, payout level, campaign goals, platform preferences, niche priorities.
+- If the user sets niche priorities (example: "gym influencers"), treat this as a ranking boost layered on top of the base dossier. Do not frame it as replacing the base niche.
 - If the user asks for recommendations/analysis, answer directly using provided ranked creators.
-- If data is missing, say what is missing and ask one concrete follow-up.
+- If a critical detail is missing, ask at most one concise follow-up question.
 
 Response Format:
-- Start with a short affirmation tied to their latest answer + one emoji.
-- Include one numbered question with 4 concrete options (A-D) when intake is incomplete.
-- Add a simple reframe that explains why this helps matching quality.
+- Start with one short affirmation tied to their latest message.
+- Give a practical answer first (creator strategy, shortlist interpretation, or optimization advice).
+- Optionally end with one concrete follow-up question only when it materially improves match quality.
 
 Style:
 - Conversational, confident, specific, not corporate, not robotic.
-- Prefer emotional connection (about 65-70%) + concise objective detail (about 30-35%).
 - Keep responses concise (usually 70-140 words).
 - No markdown tables, no JSON, no bullet spam.
 `.trim();
@@ -155,9 +161,6 @@ function formatCreators(creators: StanLeeTopCreator[]) {
 }
 
 export const stanLeeChatUserPrompt = (input: StanLeeChatPromptInput) => {
-  const userTurns = input.history.filter((m) => m.role === "user").length;
-  const nextQuestion = Math.min(5, userTurns + 1);
-
   return `
 Brand Context:
 - name: ${input.brand.name}
@@ -189,15 +192,17 @@ Campaign Preferences:
   }
 - compensationUnit: ${input.campaignPreferences?.compensationUnit ?? "unknown"}
 
+Ranking Directives:
+- campaignGoals: ${input.rankingDirectives?.campaignGoals?.join(", ") || "none"}
+- preferredPlatforms: ${input.rankingDirectives?.preferredPlatforms?.join(", ") || "none"}
+- priorityNiches: ${input.rankingDirectives?.priorityNiches?.join(", ") || "none"}
+- priorityTopics: ${input.rankingDirectives?.priorityTopics?.join(", ") || "none"}
+
 Conversation So Far:
 ${formatHistory(input.history)}
 
 Latest User Message:
 ${input.userMessage}
-
-Interview Hint:
-- user has effectively answered up to step ${userTurns}/5.
-- if asking a follow-up, continue with question ${nextQuestion}/5.
 
 Now respond as Stan-Lee with the required format and constraints.
 `.trim();

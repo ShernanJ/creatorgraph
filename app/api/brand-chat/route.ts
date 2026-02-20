@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { groqText } from "@/lib/groq";
+import {
+  groqText,
+  isGroqCreditsExhaustedError,
+  GROQ_CREDITS_EXHAUSTED_USER_MESSAGE,
+} from "@/lib/groq";
 import {
   stanLeeChatSystemPrompt,
   stanLeeChatUserPrompt,
@@ -57,14 +61,20 @@ const bodySchema = z.object({
       compensationUnit: z.string().nullable(),
     })
     .optional(),
+  rankingDirectives: z
+    .object({
+      campaignGoals: z.array(z.string()).optional(),
+      preferredPlatforms: z.array(z.string()).optional(),
+      priorityNiches: z.array(z.string()).optional(),
+      priorityTopics: z.array(z.string()).optional(),
+    })
+    .optional(),
 });
 
 function fallbackReply(brandName: string) {
   return (
-    `Great input from ${brandName}. 🚀 ` +
-    "To tighten your creator shortlist, which outcome matters most right now? " +
-    "A) direct sales B) qualified traffic C) UGC content library D) brand awareness. " +
-    "This helps me optimize matching for your real campaign goal."
+    `Great input from ${brandName}. ` +
+    "If you share your target outcome, payout model, and any niche priorities, I can tighten the creator ranking immediately."
   );
 }
 
@@ -90,6 +100,7 @@ export async function POST(req: Request) {
     history,
     topCreators,
     campaignPreferences: parsed.data.campaignPreferences,
+    rankingDirectives: parsed.data.rankingDirectives,
   };
 
   try {
@@ -105,6 +116,9 @@ export async function POST(req: Request) {
     });
   } catch (err) {
     console.error("[brand-chat] error", err);
+    if (isGroqCreditsExhaustedError(err)) {
+      return NextResponse.json({ reply: GROQ_CREDITS_EXHAUSTED_USER_MESSAGE }, { status: 200 });
+    }
     return NextResponse.json(
       { reply: fallbackReply(parsed.data.brand.name) },
       { status: 200 }
