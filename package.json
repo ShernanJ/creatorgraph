@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "seed": "tsx lib/seed.ts",
-    "generate-creators": "tsx lib/generateCreators.ts"
+    "generate-creators": "tsx lib/generateCreators.ts",
+    "match:fixtures": "tsx lib/match/runFixtures.ts"
   },
   "dependencies": {
     "@types/pg": "^8.16.0",
