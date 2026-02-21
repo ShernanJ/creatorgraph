@@ -123,6 +123,10 @@ Outreach + Deal Lifecycle Tracking
 
 - `creator_stan_profiles`
 - `POST /api/creator-stan/enrich`
+- `POST /api/creator-stan/enrich-agent`
+  - Playwright-based Stan page crawl for richer JS-rendered data
+  - supports `discoveryRunId` targeting after a specific crawl run
+  - extracts profile name/handle, header image, structured offer cards, pricing, and social links
 - Extracted signals:
   - offers
   - pricing points
@@ -227,6 +231,7 @@ It includes:
 - `GET /api/creator-discovery?discoveryRunId=...`
 - `POST /api/creator-identity/resolve`
 - `POST /api/creator-stan/enrich`
+- `POST /api/creator-stan/enrich-agent`
 - `POST /api/creator-social/enrich`
 - `POST /api/creator-import`
 

@@ -223,8 +223,13 @@ create table if not exists creator_stan_profiles (
   creator_identity_id text not null references creator_identities(id) on delete cascade,
   stan_slug text not null,
   stan_url text not null,
+  profile_name text,
+  profile_handle text,
   bio_description text,
   offers jsonb not null default '[]'::jsonb,
+  offer_cards jsonb not null default '[]'::jsonb,
+  offer_image_urls jsonb not null default '[]'::jsonb,
+  header_image_url text,
   pricing_points jsonb not null default '[]'::jsonb,
   product_types jsonb not null default '[]'::jsonb,
   outbound_socials jsonb not null default '[]'::jsonb,
@@ -242,6 +247,17 @@ create index if not exists idx_creator_stan_profiles_identity
 on creator_stan_profiles(creator_identity_id);
 create index if not exists idx_creator_stan_profiles_slug
 on creator_stan_profiles(stan_slug);
+
+alter table creator_stan_profiles
+add column if not exists profile_name text;
+alter table creator_stan_profiles
+add column if not exists profile_handle text;
+alter table creator_stan_profiles
+add column if not exists offer_cards jsonb not null default '[]'::jsonb;
+alter table creator_stan_profiles
+add column if not exists offer_image_urls jsonb not null default '[]'::jsonb;
+alter table creator_stan_profiles
+add column if not exists header_image_url text;
 
 -- stage 5: social performance enrichment
 create table if not exists creator_social_profiles (
