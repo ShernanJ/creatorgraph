@@ -37,6 +37,9 @@ type RankedCreator = {
     metrics?: {
       top_topics?: string[];
       platform_metrics?: Record<string, { followers?: number; avg_views?: number }>;
+      import_meta?: {
+        stan_header_image_url?: string | null;
+      };
     };
   };
   score: number;
@@ -278,6 +281,78 @@ const PLATFORM_META: Record<PlatformKey, { label: string; short: string; badgeCl
   },
 };
 
+const STANLEY_NICHE_GROUPS: Record<string, string[]> = {
+  Business: [
+    "business coaching",
+    "creator monetization",
+    "ecommerce & marketing",
+    "ecommerce growth",
+    "b2b saas",
+    "startups & entrepreneurship",
+    "careers & job search",
+    "personal finance",
+    "real estate investing",
+  ],
+  Technology: ["ai productivity", "ai tools", "consumer tech & gadgets"],
+  Education: ["education & upskilling", "study productivity"],
+  Fitness: ["fitness coaching", "fitness", "sports & outdoors"],
+  Wellness: ["wellness & nutrition", "mental wellness"],
+  Cooking: ["healthy cooking", "food & recipes"],
+  Fashion: ["fashion & apparel"],
+  Lifestyle: ["life coaching", "home & decor", "parenting & family"],
+  Skincare: ["beauty & skincare", "skincare"],
+  Pet: ["pets"],
+  Travel: ["travel"],
+  Gaming: ["gaming"],
+};
+
+function normalizeNicheLabel(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+function stanleyGroupForNiche(niche: string) {
+  const normalizedNiche = normalizeNicheLabel(niche);
+  if (!normalizedNiche) return "Business";
+
+  for (const [group, labels] of Object.entries(STANLEY_NICHE_GROUPS)) {
+    for (const label of labels) {
+      const normalizedLabel = normalizeNicheLabel(label);
+      if (
+        normalizedNiche === normalizedLabel ||
+        normalizedNiche.includes(normalizedLabel) ||
+        normalizedLabel.includes(normalizedNiche)
+      ) {
+        return group;
+      }
+    }
+  }
+
+  return "Business";
+}
+
+function stanleyImageForNiche(niche: string) {
+  const group = stanleyGroupForNiche(niche);
+  const assetByGroup: Record<string, string> = {
+    Business: "Business",
+    Technology: "Technology",
+    Education: "Education",
+    Fitness: "Fitness",
+    Wellness: "Wellness",
+    Cooking: "Cooking",
+    Fashion: "Fashion",
+    Lifestyle: "Lifestyle",
+    Skincare: "Skincare",
+    Pet: "Pet",
+    Travel: "Travel",
+    Gaming: "Gaming",
+  };
+  const asset = assetByGroup[group] ?? "Business";
+  return `/Stanley-${asset}.png`;
+}
+
 const STANLEY_VARIANTS: Array<[RegExp, StanleyVariant]> = [
   [/fitness|wellness|nutrition|gym/i, {
     title: "Athlete Stanley",
@@ -333,6 +408,25 @@ function normalizePlatformKey(value: string): PlatformKey | null {
   if (lower === "x" || lower.includes("x.com") || lower.includes("twitter")) return "x";
   if (lower.includes("linkedin") || lower === "in") return "linkedin";
   return null;
+}
+
+function platformFromSocialUrl(link: string): PlatformKey | null {
+  try {
+    const host = new URL(link).hostname.toLowerCase();
+    if (host.includes("instagram.com")) return "instagram";
+    if (host.includes("tiktok.com")) return "tiktok";
+    if (host.includes("youtube.com") || host.includes("youtu.be")) return "youtube";
+    if (host.includes("x.com") || host.includes("twitter.com")) return "x";
+    if (host.includes("linkedin.com")) return "linkedin";
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function platformProfileLink(c: RankedCreator["creator"], platform: PlatformKey) {
+  const links = socialLinks(c);
+  return links.find((link) => platformFromSocialUrl(link) === platform) ?? null;
 }
 
 function creatorPlatforms(c: RankedCreator["creator"]) {
@@ -449,6 +543,8 @@ function stanleyVariantForNiche(niche: string): StanleyVariant {
 }
 
 function profilePhotoUrl(c: RankedCreator["creator"]) {
+  const stanHeader = c.metrics?.import_meta?.stan_header_image_url;
+  if (typeof stanHeader === "string" && stanHeader.trim()) return stanHeader.trim();
   return c.profile_photo_url ?? c.avatar_url ?? null;
 }
 
@@ -957,11 +1053,48 @@ const PREFERENCE_SYNC_STATUS_LINES = [
   "Refreshing compatibility scores with your niche boosts...",
 ];
 
+function creatorSummarySnapshot(r: RankedCreator) {
+  const c = r.creator;
+  const platforms = creatorPlatforms(c).map((platform) => PLATFORM_META[platform].label);
+  const topics = (c.metrics?.top_topics ?? []).slice(0, 4);
+  const followers = followersTotal(c);
+  const rate = estimatedPrice(c);
+  const primaryReason =
+    r.reasons?.[0] ?? "their audience and content profile align with your campaign priorities";
+  const reasonSentence = primaryReason
+    ? `${primaryReason.charAt(0).toUpperCase()}${primaryReason.slice(1)}.`
+    : "";
+
+  return {
+    about: `${c.name} is a ${c.niche} creator${
+      platforms.length ? ` active on ${platforms.join(", ")}` : ""
+    }. ${reasonSentence}`.trim(),
+    platforms: platforms.length ? platforms.join(" • ") : "Platform signals still enriching",
+    reach: followers ? `${compactCount(followers)} followers` : "Reach signal pending",
+    estRate: rate ? `$${compactCount(rate)}/video` : "Rate signal pending",
+    themes: topics.length ? topics.join(", ") : "No strong topic tags yet",
+    whyFit: primaryReason,
+    topics,
+  };
+}
+
 function CreatorCardsGrid({ cards }: { cards: RankedCreator[] }) {
+  const [expandedCardKey, setExpandedCardKey] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    setExpandedCardKey((prev) => {
+      if (!prev) return null;
+      const stillExists = cards.some((item, idx) => `${item.creator.id}-${idx}` === prev);
+      return stillExists ? prev : null;
+    });
+  }, [cards]);
+
   return (
     <div className="grid gap-3 sm:grid-cols-2">
       {cards.map((r, index) => {
         const c = r.creator;
+        const cardKey = `${c.id}-${index}`;
+        const isExpanded = expandedCardKey === cardKey;
         const followers = followersTotal(c);
         const p = estimatedPrice(c);
         const stan = stanLink(c);
@@ -970,125 +1103,254 @@ function CreatorCardsGrid({ cards }: { cards: RankedCreator[] }) {
         const platforms = creatorPlatforms(c).slice(0, 4);
         const photoUrl = profilePhotoUrl(c);
         const topics = (c.metrics?.top_topics ?? []).slice(0, 3);
+        const summary = creatorSummarySnapshot(r);
 
         return (
           <article
-            key={`${c.id}-${index}`}
-            className="creator-card-in group relative overflow-hidden rounded-[22px] border border-white/15 bg-[linear-gradient(165deg,#4f4a66_0%,#343549_55%,#242636_100%)] p-3 shadow-[0_12px_32px_rgba(8,10,18,0.42)] backdrop-blur-md transition hover:-translate-y-[1px] hover:border-white/25 hover:shadow-[0_14px_36px_rgba(5,7,12,0.5)]"
+            key={cardKey}
+            role="button"
+            tabIndex={0}
+            aria-expanded={isExpanded}
+            onClick={() => setExpandedCardKey((prev) => (prev === cardKey ? null : cardKey))}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                setExpandedCardKey((prev) => (prev === cardKey ? null : cardKey));
+              }
+            }}
+            className={[
+              "creator-card-in group relative cursor-pointer overflow-hidden rounded-[22px] border border-white/15 bg-[linear-gradient(165deg,#4f4a66_0%,#343549_55%,#242636_100%)] p-3 shadow-[0_12px_32px_rgba(8,10,18,0.42)] backdrop-blur-md transition-all duration-500",
+              isExpanded
+                ? "sm:col-span-2 border-white/26 shadow-[0_16px_40px_rgba(5,7,12,0.58)]"
+                : "hover:-translate-y-[1px] hover:border-white/25 hover:shadow-[0_14px_36px_rgba(5,7,12,0.5)]",
+            ].join(" ")}
             style={{ animationDelay: `${index * 85}ms` }}
           >
             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(280px_140px_at_0%_0%,rgba(199,158,255,0.24),transparent_62%)]" />
-            <div className="relative space-y-3">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-white/95">{user}</p>
+            <div className={isExpanded ? "relative min-h-[520px]" : "relative"}>
+              <div
+                className="relative h-full transition-transform duration-500 [transform-style:preserve-3d]"
+                style={{ transform: isExpanded ? "rotateY(180deg)" : "rotateY(0deg)" }}
+              >
+                <div
+                  className="relative space-y-3"
+                  style={{ backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden" }}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-white/95">{user}</p>
+                      {stanSlugValue ? (
+                        <a
+                          href={`https://stan.store/${stanSlugValue}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          onClick={(event) => event.stopPropagation()}
+                          className="truncate text-[11px] text-violet-200/90 underline underline-offset-4 transition hover:text-violet-100"
+                        >
+                          stan.store/{stanSlugValue}
+                        </a>
+                      ) : (
+                        <p className="text-[11px] text-white/45">no stan.store link</p>
+                      )}
+                    </div>
+                    <div className="flex flex-col items-end gap-1">
+                      <span className="rounded-full bg-emerald-400/18 px-2.5 py-1 text-[11px] font-semibold text-emerald-100 ring-1 ring-emerald-200/30">
+                        {formatPct(Number(r.score) || 0)}
+                      </span>
+                      <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.08em] text-white/70 ring-1 ring-white/15">
+                        compat
+                      </span>
+                    </div>
+                  </div>
+
+                  {photoUrl ? (
+                    <div className="relative h-32 overflow-hidden rounded-2xl border border-white/15 ring-1 ring-white/10">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={photoUrl}
+                        alt={c.name}
+                        className="h-full w-full object-cover"
+                        loading="lazy"
+                      />
+                    </div>
+                  ) : (
+                    <NicheStanleyPortrait niche={c.niche} />
+                  )}
+
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="rounded-full bg-white/12 px-2.5 py-1 text-[11px] font-medium text-white/85 ring-1 ring-white/15">
+                      {c.niche}
+                    </span>
+                    <span className="text-[11px] text-white/60">
+                      reach {followers ? compactCount(followers) : "—"}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {platforms.length ? (
+                      platforms.map((platform) => {
+                        const meta = PLATFORM_META[platform];
+                        const platformFollowers = followersByPlatform(c, platform);
+                        const platformUrl = platformProfileLink(c, platform);
+                        return (
+                          platformUrl ? (
+                            <a
+                              key={`${c.id}-${platform}`}
+                              href={platformUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              onClick={(event) => event.stopPropagation()}
+                              className="flex items-center justify-between rounded-lg bg-black/25 px-2 py-1.5 ring-1 ring-white/12 transition hover:bg-black/30 hover:ring-white/22"
+                              title={`Open ${meta.label} profile`}
+                            >
+                              <span className="inline-flex items-center gap-1.5">
+                                <span
+                                  className={[
+                                    "inline-flex h-5 w-5 items-center justify-center rounded-md ring-1",
+                                    meta.badgeClass,
+                                  ].join(" ")}
+                                >
+                                  <PlatformIcon platform={platform} />
+                                </span>
+                                <span className="text-[10px] uppercase tracking-[0.07em] text-white/70">
+                                  {meta.short}
+                                </span>
+                              </span>
+                              <span className="text-[10px] text-white/78">
+                                ({followerBandLabel(platformFollowers)})
+                              </span>
+                            </a>
+                          ) : (
+                            <div
+                              key={`${c.id}-${platform}`}
+                              className="flex items-center justify-between rounded-lg bg-black/25 px-2 py-1.5 ring-1 ring-white/12"
+                              title={meta.label}
+                            >
+                              <span className="inline-flex items-center gap-1.5">
+                                <span
+                                  className={[
+                                    "inline-flex h-5 w-5 items-center justify-center rounded-md ring-1",
+                                    meta.badgeClass,
+                                  ].join(" ")}
+                                >
+                                  <PlatformIcon platform={platform} />
+                                </span>
+                                <span className="text-[10px] uppercase tracking-[0.07em] text-white/70">
+                                  {meta.short}
+                                </span>
+                              </span>
+                              <span className="text-[10px] text-white/78">
+                                ({followerBandLabel(platformFollowers)})
+                              </span>
+                            </div>
+                          )
+                        );
+                      })
+                    ) : (
+                      <div className="col-span-2 rounded-lg bg-black/20 px-2 py-1.5 text-[10px] text-white/55 ring-1 ring-white/12">
+                        No platform data yet
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-[1fr_132px] items-stretch gap-2">
+                    <div className="rounded-xl bg-black/25 px-3 py-2.5 ring-1 ring-white/12">
+                      <p className="text-[10px] uppercase tracking-[0.09em] text-white/45">est. rate</p>
+                      <p className="text-sm font-medium text-white/95">
+                        {p ? `$${compactCount(p)}/video` : "—"}
+                      </p>
+                    </div>
+                    <div className="rounded-xl bg-[linear-gradient(165deg,rgba(146,142,187,0.18)_0%,rgba(62,65,97,0.22)_100%)] p-2 ring-1 ring-white/14">
+                      <p className="mb-1.5 text-center text-[10px] font-semibold text-white/82">{c.niche}</p>
+                      <Image
+                        src={stanleyImageForNiche(c.niche)}
+                        alt={`Stanley ${stanleyGroupForNiche(c.niche)}`}
+                        width={108}
+                        height={108}
+                        sizes="108px"
+                        className="h-[96px] w-auto object-contain drop-shadow-[0_6px_14px_rgba(0,0,0,0.3)]"
+                      />
+                    </div>
+                  </div>
+
+                  {topics.length ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {topics.map((topic) => (
+                        <span
+                          key={`${c.id}-${topic}`}
+                          className="rounded-full bg-white/8 px-2 py-1 text-[10px] text-white/78 ring-1 ring-white/10"
+                        >
+                          {topic}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+
+                  {r.reasons?.[0] ? (
+                    <p className="text-[11px] leading-5 text-white/62">Why: {r.reasons[0]}</p>
+                  ) : null}
+                  <p className="text-[10px] text-white/45">Click card to flip for full creator summary</p>
+                </div>
+
+                <div
+                  className="absolute inset-0 flex flex-col gap-3 rounded-[18px] border border-white/16 bg-[linear-gradient(175deg,#4a4a67_0%,#2d3048_55%,#202236_100%)] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]"
+                  style={{
+                    backfaceVisibility: "hidden",
+                    WebkitBackfaceVisibility: "hidden",
+                    transform: "rotateY(180deg)",
+                  }}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-base font-semibold text-white/95">{c.name}</p>
+                      <p className="truncate text-[12px] text-white/62">{user}</p>
+                    </div>
+                    <span className="rounded-full bg-emerald-400/18 px-2.5 py-1 text-[11px] font-semibold text-emerald-100 ring-1 ring-emerald-200/30">
+                      {formatPct(Number(r.score) || 0)} fit
+                    </span>
+                  </div>
+
+                  <p className="text-[13px] leading-6 text-white/88">{summary.about}</p>
+
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <div className="rounded-lg bg-black/24 px-3 py-2 ring-1 ring-white/12">
+                      <p className="text-[10px] uppercase tracking-[0.09em] text-white/48">Platforms</p>
+                      <p className="text-[12px] text-white/86">{summary.platforms}</p>
+                    </div>
+                    <div className="rounded-lg bg-black/24 px-3 py-2 ring-1 ring-white/12">
+                      <p className="text-[10px] uppercase tracking-[0.09em] text-white/48">Estimated Reach</p>
+                      <p className="text-[12px] text-white/86">{summary.reach}</p>
+                    </div>
+                    <div className="rounded-lg bg-black/24 px-3 py-2 ring-1 ring-white/12">
+                      <p className="text-[10px] uppercase tracking-[0.09em] text-white/48">Rate Benchmark</p>
+                      <p className="text-[12px] text-white/86">{summary.estRate}</p>
+                    </div>
+                    <div className="rounded-lg bg-black/24 px-3 py-2 ring-1 ring-white/12">
+                      <p className="text-[10px] uppercase tracking-[0.09em] text-white/48">Why Match</p>
+                      <p className="text-[12px] text-white/86">{summary.whyFit}</p>
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg bg-black/22 px-3 py-2 ring-1 ring-white/12">
+                    <p className="text-[10px] uppercase tracking-[0.09em] text-white/48">Content Themes</p>
+                    <p className="text-[12px] text-white/84">{summary.themes}</p>
+                  </div>
+
                   {stanSlugValue ? (
                     <a
                       href={`https://stan.store/${stanSlugValue}`}
                       target="_blank"
                       rel="noreferrer"
-                      className="truncate text-[11px] text-violet-200/90 underline underline-offset-4 transition hover:text-violet-100"
+                      onClick={(event) => event.stopPropagation()}
+                      className="inline-flex w-fit items-center rounded-full bg-white/10 px-3 py-1.5 text-[11px] text-violet-100 ring-1 ring-white/16 transition hover:bg-white/15"
                     >
-                      stan.store/{stanSlugValue}
+                      Open stan.store/{stanSlugValue}
                     </a>
-                  ) : (
-                    <p className="text-[11px] text-white/45">no stan.store link</p>
-                  )}
-                </div>
-                <div className="flex flex-col items-end gap-1">
-                  <span className="rounded-full bg-emerald-400/18 px-2.5 py-1 text-[11px] font-semibold text-emerald-100 ring-1 ring-emerald-200/30">
-                    {formatPct(Number(r.score) || 0)}
-                  </span>
-                  <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.08em] text-white/70 ring-1 ring-white/15">
-                    compat
-                  </span>
+                  ) : null}
+
+                  <p className="mt-auto text-[10px] text-white/48">Click card again to flip back</p>
                 </div>
               </div>
-
-              {photoUrl ? (
-                <div className="relative h-32 overflow-hidden rounded-2xl border border-white/15 ring-1 ring-white/10">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={photoUrl} alt={c.name} className="h-full w-full object-cover" loading="lazy" />
-                </div>
-              ) : (
-                <NicheStanleyPortrait niche={c.niche} />
-              )}
-
-              <div className="flex items-center justify-between gap-2">
-                <span className="rounded-full bg-white/12 px-2.5 py-1 text-[11px] font-medium text-white/85 ring-1 ring-white/15">
-                  {c.niche}
-                </span>
-                <span className="text-[11px] text-white/60">
-                  reach {followers ? compactCount(followers) : "—"}
-                </span>
-              </div>
-
-              <div className="grid grid-cols-2 gap-1.5">
-                {platforms.length ? (
-                  platforms.map((platform) => {
-                    const meta = PLATFORM_META[platform];
-                    const platformFollowers = followersByPlatform(c, platform);
-                    return (
-                      <div
-                        key={`${c.id}-${platform}`}
-                        className="flex items-center justify-between rounded-lg bg-black/25 px-2 py-1.5 ring-1 ring-white/12"
-                        title={meta.label}
-                      >
-                        <span className="inline-flex items-center gap-1.5">
-                          <span
-                            className={[
-                              "inline-flex h-5 w-5 items-center justify-center rounded-md ring-1",
-                              meta.badgeClass,
-                            ].join(" ")}
-                          >
-                            <PlatformIcon platform={platform} />
-                          </span>
-                          <span className="text-[10px] uppercase tracking-[0.07em] text-white/70">
-                            {meta.short}
-                          </span>
-                        </span>
-                        <span className="text-[10px] text-white/78">
-                          ({followerBandLabel(platformFollowers)})
-                        </span>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <div className="col-span-2 rounded-lg bg-black/20 px-2 py-1.5 text-[10px] text-white/55 ring-1 ring-white/12">
-                    No platform data yet
-                  </div>
-                )}
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div className="rounded-xl bg-black/25 px-3 py-2 ring-1 ring-white/12">
-                  <p className="text-[10px] uppercase tracking-[0.09em] text-white/45">est. rate</p>
-                  <p className="text-sm font-medium text-white/95">
-                    {p ? `$${compactCount(p)}/video` : "—"}
-                  </p>
-                </div>
-                <div className="rounded-xl bg-black/25 px-3 py-2 ring-1 ring-white/12">
-                  <p className="text-[10px] uppercase tracking-[0.09em] text-white/45">next slot</p>
-                  <p className="text-sm font-medium text-white/95">coming soon</p>
-                </div>
-              </div>
-
-              {topics.length ? (
-                <div className="flex flex-wrap gap-1.5">
-                  {topics.map((topic) => (
-                    <span
-                      key={`${c.id}-${topic}`}
-                      className="rounded-full bg-white/8 px-2 py-1 text-[10px] text-white/78 ring-1 ring-white/10"
-                    >
-                      {topic}
-                    </span>
-                  ))}
-                </div>
-              ) : null}
-
-              {r.reasons?.[0] ? (
-                <p className="text-[11px] leading-5 text-white/62">Why: {r.reasons[0]}</p>
-              ) : null}
             </div>
           </article>
         );
