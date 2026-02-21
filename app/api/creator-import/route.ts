@@ -17,6 +17,7 @@ type CandidateRow = {
   creator_identity_id: string;
   canonical_stan_slug: string | null;
   stan_url: string | null;
+  header_image_url: string | null;
   bio_description: string | null;
   pricing_points: unknown;
   product_types: unknown;
@@ -182,6 +183,7 @@ async function fetchCandidates(input: z.infer<typeof bodySchema>): Promise<Candi
       ci.id as creator_identity_id,
       ci.canonical_stan_slug,
       csp.stan_url,
+      csp.header_image_url,
       csp.bio_description,
       csp.pricing_points,
       csp.product_types,
@@ -321,6 +323,7 @@ export async function POST(req: Request) {
         source: "stan_pipeline",
         creator_identity_id: row.creator_identity_id,
         canonical_stan_slug: row.canonical_stan_slug,
+        stan_header_image_url: row.header_image_url ?? null,
         extracted_confidence: row.extracted_confidence ?? null,
         social_avg_confidence: socialAvgConfidence,
         compatibility_confidence: signals.confidence,

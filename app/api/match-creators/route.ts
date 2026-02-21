@@ -67,16 +67,26 @@ type CreatorPoolSelection = {
   persistedMatches: boolean;
 };
 
+const CREATOR_SELECT_WITH_STAN_IMAGE = `
+  select
+    c.*,
+    coalesce(
+      nullif(c.metrics->'import_meta'->>'stan_header_image_url', ''),
+      csp.header_image_url
+    ) as profile_photo_url
+  from creators c
+  left join creator_stan_profiles csp on csp.creator_identity_id = c.creator_identity_id
+`;
+
 async function selectCreatorPool(limit: number, sourceScope: MatchCreatorSourceScope): Promise<CreatorPoolSelection> {
   const sourceScoped = sourceScope === "stan_pipeline";
   const allCreators = sourceScope === "all";
 
   if (sourceScoped) {
     const scoped = await q<any>(
-      `select *
-       from creators
-       where source = 'stan_pipeline'
-       order by imported_at desc nulls last, created_at desc nulls last, id asc
+      `${CREATOR_SELECT_WITH_STAN_IMAGE}
+       where c.source = 'stan_pipeline'
+       order by c.imported_at desc nulls last, c.created_at desc nulls last, c.id asc
        limit $1`,
       [limit]
     );
@@ -90,9 +100,8 @@ async function selectCreatorPool(limit: number, sourceScope: MatchCreatorSourceS
 
   if (allCreators) {
     const all = await q<any>(
-      `select *
-       from creators
-       order by imported_at desc nulls last, created_at desc nulls last, id asc
+      `${CREATOR_SELECT_WITH_STAN_IMAGE}
+       order by c.imported_at desc nulls last, c.created_at desc nulls last, c.id asc
        limit $1`,
       [limit]
     );
@@ -107,10 +116,9 @@ async function selectCreatorPool(limit: number, sourceScope: MatchCreatorSourceS
   } else {
     // auto mode: prefer imported pipeline creators, then identity-backed creators, then all creators.
     const pipeline = await q<any>(
-      `select *
-       from creators
-       where source = 'stan_pipeline'
-       order by imported_at desc nulls last, created_at desc nulls last, id asc
+      `${CREATOR_SELECT_WITH_STAN_IMAGE}
+       where c.source = 'stan_pipeline'
+       order by c.imported_at desc nulls last, c.created_at desc nulls last, c.id asc
        limit $1`,
       [limit]
     );
@@ -124,10 +132,9 @@ async function selectCreatorPool(limit: number, sourceScope: MatchCreatorSourceS
     }
 
     const identityBacked = await q<any>(
-      `select *
-       from creators
-       where creator_identity_id is not null
-       order by imported_at desc nulls last, created_at desc nulls last, id asc
+      `${CREATOR_SELECT_WITH_STAN_IMAGE}
+       where c.creator_identity_id is not null
+       order by c.imported_at desc nulls last, c.created_at desc nulls last, c.id asc
        limit $1`,
       [limit]
     );
@@ -141,9 +148,8 @@ async function selectCreatorPool(limit: number, sourceScope: MatchCreatorSourceS
     }
 
     const all = await q<any>(
-      `select *
-       from creators
-       order by imported_at desc nulls last, created_at desc nulls last, id asc
+      `${CREATOR_SELECT_WITH_STAN_IMAGE}
+       order by c.imported_at desc nulls last, c.created_at desc nulls last, c.id asc
        limit $1`,
       [limit]
     );
