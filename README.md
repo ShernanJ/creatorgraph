@@ -1,6 +1,6 @@
-# CreatorGraph — Creator Partnership Intelligence Platform
+# Stan Lee - Stan but for Brands
 
-CreatorGraph is an automated brand-to-creator deal generation layer designed to integrate directly into creator ecosystems like Stan.
+Stan Lee is an automated brand-to-creator deal generation layer designed to integrate directly into creator ecosystems like Stan.
 
 It transforms brand onboarding, campaign creation, creator matching, and outreach into a structured, intelligence-driven revenue pipeline.
 
