@@ -114,8 +114,11 @@ export default async function MatchesPage(props: {
               {meta.breakdown && (
                 <p className="text-xs text-white/50">
                   niche {meta.breakdown.nicheScore} · topics {meta.breakdown.topicScore} ·
-                  platform {meta.breakdown.platformScore} · engagement{" "}
-                  {meta.breakdown.engagementScore}
+                  audience {meta.breakdown.audienceScore} · platform{" "}
+                  {meta.breakdown.platformScore} · engagement {meta.breakdown.engagementScore}
+                  {meta.breakdown.priorityBoost
+                    ? ` · boost ${meta.breakdown.priorityBoost}`
+                    : ""}
                   {meta.breakdown.bestPlatform ? ` · best ${meta.breakdown.bestPlatform}` : ""}
                 </p>
               )}

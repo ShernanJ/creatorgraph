@@ -1,11 +1,27 @@
 import type { Creator, MatchSpec, ScoreResult } from "../types";
 
 function normalize(s: string) {
-  return s.trim().toLowerCase();
+  return s
+    .trim()
+    .toLowerCase()
+    .replace(/\bcontent creators\b/g, "creator")
+    .replace(/\bcreators\b/g, "creator")
+    .replace(/\binfluencers\b/g, "influencer")
+    .replace(/\bsmall businesses\b/g, "small business")
+    .replace(/\s+/g, " ");
 }
 
 function tokens(s: string) {
-  return normalize(s).split(/[^a-z0-9]+/).filter(Boolean);
+  return normalize(s)
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean)
+    .map((token) => {
+      if (token.length > 4 && token.endsWith("ies")) return `${token.slice(0, -3)}y`;
+      if (token.length > 4 && token.endsWith("s") && !token.endsWith("ss")) {
+        return token.slice(0, -1);
+      }
+      return token;
+    });
 }
 
 function tokenOverlap(a: string, b: string) {

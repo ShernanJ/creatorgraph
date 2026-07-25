@@ -93,6 +93,76 @@ const FIXTURES: Fixture[] = [
     ],
     expectedTopCreatorNiche: "life coaching",
   },
+  {
+    name: "wording variants should still rank the closest creator",
+    brand: {
+      category: "skin care",
+      preferred_platforms: ["instagram", "tiktok"],
+      target_audience: ["women 18-34"],
+      goals: ["sales"],
+      campaign_angles: ["routine education"],
+      match_topics: ["hydrating routine", "acne care"],
+    },
+    creators: [
+      {
+        niche: "beauty & skincare",
+        platforms: ["instagram", "tiktok"],
+        audience_types: ["women 18-34"],
+        estimated_engagement: 0.044,
+        metrics: {
+          top_topics: ["skincare routine", "acne treatment"],
+          compatibility_signals: { niche_confidence: 0.82, confidence: 0.78 },
+        },
+      },
+      {
+        niche: "creator monetization",
+        platforms: ["instagram", "tiktok"],
+        audience_types: ["content creators"],
+        estimated_engagement: 0.08,
+        metrics: {
+          top_topics: ["creator economy", "digital products"],
+          compatibility_signals: { niche_confidence: 0.35, confidence: 0.42 },
+        },
+      },
+    ],
+    expectedTopCreatorNiche: "beauty & skincare",
+  },
+  {
+    name: "creator products should contribute to topic fit",
+    brand: {
+      category: "ecommerce marketing",
+      preferred_platforms: ["instagram"],
+      target_audience: ["brand owners"],
+      goals: ["source UGC creative"],
+      campaign_angles: ["creator content for ads"],
+      match_topics: ["UGC creators", "content production"],
+    },
+    creators: [
+      {
+        niche: "ecommerce & marketing",
+        platforms: ["instagram"],
+        audience_types: ["brand owners", "ecommerce founders"],
+        products_sold: ["UGC content package", "content production"],
+        estimated_engagement: 0.038,
+        metrics: {
+          top_topics: ["ad creatives"],
+          compatibility_signals: { niche_confidence: 0.76, confidence: 0.72 },
+        },
+      },
+      {
+        niche: "personal finance",
+        platforms: ["instagram"],
+        audience_types: ["young professionals"],
+        products_sold: ["budget planner"],
+        estimated_engagement: 0.07,
+        metrics: {
+          top_topics: ["saving money", "debt payoff"],
+          compatibility_signals: { niche_confidence: 0.8, confidence: 0.75 },
+        },
+      },
+    ],
+    expectedTopCreatorNiche: "ecommerce & marketing",
+  },
 ];
 
 export function runMatchFixtures() {

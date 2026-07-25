@@ -1,14 +1,38 @@
 import type { Creator, MatchSpec, ScoreResult } from "../types";
 
 function normalize(s: string) {
-  return s.trim().toLowerCase();
+  return s
+    .trim()
+    .toLowerCase()
+    .replace(/\bskin care\b/g, "skincare")
+    .replace(/\be[\s-]?commerce\b/g, "ecommerce")
+    .replace(/\buser generated content\b/g, "ugc")
+    .replace(/\bcontent creators\b/g, "creator")
+    .replace(/\bcreators\b/g, "creator")
+    .replace(/\binfluencers\b/g, "influencer")
+    .replace(/\s+/g, " ");
 }
 
 function tokens(s: string) {
-  return normalize(s).split(/[^a-z0-9]+/).filter(Boolean);
+  return normalize(s)
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean)
+    .map((token) => {
+      if (token.length > 4 && token.endsWith("ies")) return `${token.slice(0, -3)}y`;
+      if (token.length > 4 && token.endsWith("s") && !token.endsWith("ss")) {
+        return token.slice(0, -1);
+      }
+      return token;
+    });
 }
 
-function tokenJaccard(a: string, b: string) {
+function lexicalSimilarity(a: string, b: string) {
+  const normalizedA = normalize(a);
+  const normalizedB = normalize(b);
+  if (!normalizedA || !normalizedB) return 0;
+  if (normalizedA === normalizedB) return 1;
+  if (normalizedA.includes(normalizedB) || normalizedB.includes(normalizedA)) return 0.84;
+
   const aa = new Set(tokens(a));
   const bb = new Set(tokens(b));
   if (aa.size === 0 || bb.size === 0) return 0;
@@ -18,7 +42,9 @@ function tokenJaccard(a: string, b: string) {
     if (bb.has(t)) inter += 1;
   }
   const union = aa.size + bb.size - inter;
-  return union > 0 ? inter / union : 0;
+  const jaccard = union > 0 ? inter / union : 0;
+  const overlap = inter / Math.max(1, Math.min(aa.size, bb.size));
+  return Math.max(jaccard, overlap * 0.82);
 }
 
 function uniq(values: string[]) {
@@ -44,6 +70,7 @@ export function topicSimilarity(spec: MatchSpec, creator: Creator): ScoreResult 
     ...(creator.metrics?.top_topics ?? []),
     ...(creator.metrics?.compatibility_signals?.match_topics ?? []),
     ...(creator.metrics?.compatibility_signals?.intent_signals ?? []),
+    ...(creator.products_sold ?? []),
   ]);
 
   if (brandTopics.length === 0 || creatorTopics.length === 0) {
@@ -54,7 +81,7 @@ export function topicSimilarity(spec: MatchSpec, creator: Creator): ScoreResult 
   for (const bt of brandTopics) {
     let best = 0;
     for (const ct of creatorTopics) {
-      const sim = bt === ct ? 1 : tokenJaccard(bt, ct);
+      const sim = lexicalSimilarity(bt, ct);
       if (sim > best) best = sim;
     }
     totalBest += best;
