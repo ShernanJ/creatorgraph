@@ -10,6 +10,7 @@ import type {
   ScoreResult,
 } from "./types";
 import { blendPolicyWeights, clamp01 } from "./policies";
+import { normalizePhrase, phraseSimilarity, uniqNormalizedPhrases } from "./semantic";
 
 // modules you already created
 import { nicheAffinity } from "./modules/nicheAffinity";
@@ -18,43 +19,8 @@ import { platformAlignment } from "./modules/platformAlignment";
 import { engagementFit } from "./modules/engagementFit";
 import { audienceFit } from "./modules/audienceFit";
 
-function normalizePhrase(value: string) {
-  return String(value ?? "").trim().toLowerCase().replace(/\s+/g, " ");
-}
-
 function uniqPhrases(values: string[]) {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const raw of values) {
-    const value = normalizePhrase(raw);
-    if (!value || seen.has(value)) continue;
-    seen.add(value);
-    out.push(value);
-  }
-  return out;
-}
-
-function tokenSet(value: string) {
-  return new Set(normalizePhrase(value).split(/[^a-z0-9]+/).filter(Boolean));
-}
-
-function phraseSimilarity(a: string, b: string) {
-  const aa = normalizePhrase(a);
-  const bb = normalizePhrase(b);
-  if (!aa || !bb) return 0;
-  if (aa === bb) return 1;
-  if (aa.includes(bb) || bb.includes(aa)) return 0.84;
-
-  const ta = tokenSet(aa);
-  const tb = tokenSet(bb);
-  if (!ta.size || !tb.size) return 0;
-
-  let overlap = 0;
-  for (const token of ta) {
-    if (tb.has(token)) overlap += 1;
-  }
-  const denom = Math.max(1, Math.min(ta.size, tb.size));
-  return overlap / denom;
+  return uniqNormalizedPhrases(values);
 }
 
 function intentKeywordScore(texts: string[], keywords: string[]) {

@@ -1,37 +1,5 @@
 import type { Creator, MatchSpec, ScoreResult } from "../types";
-
-function normalize(s: string) {
-  return s.trim().toLowerCase();
-}
-
-function tokens(s: string) {
-  return normalize(s).split(/[^a-z0-9]+/).filter(Boolean);
-}
-
-function tokenJaccard(a: string, b: string) {
-  const aa = new Set(tokens(a));
-  const bb = new Set(tokens(b));
-  if (aa.size === 0 || bb.size === 0) return 0;
-
-  let inter = 0;
-  for (const t of aa) {
-    if (bb.has(t)) inter += 1;
-  }
-  const union = aa.size + bb.size - inter;
-  return union > 0 ? inter / union : 0;
-}
-
-function uniq(values: string[]) {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const raw of values) {
-    const value = normalize(raw);
-    if (!value || seen.has(value)) continue;
-    seen.add(value);
-    out.push(value);
-  }
-  return out;
-}
+import { phraseSimilarity, uniqNormalizedPhrases } from "../semantic";
 
 function clamp01(x: number) {
   if (!Number.isFinite(x)) return 0;
@@ -39,11 +7,12 @@ function clamp01(x: number) {
 }
 
 export function topicSimilarity(spec: MatchSpec, creator: Creator): ScoreResult {
-  const brandTopics = uniq(spec.topics ?? []);
-  const creatorTopics = uniq([
+  const brandTopics = uniqNormalizedPhrases(spec.topics ?? []);
+  const creatorTopics = uniqNormalizedPhrases([
     ...(creator.metrics?.top_topics ?? []),
     ...(creator.metrics?.compatibility_signals?.match_topics ?? []),
     ...(creator.metrics?.compatibility_signals?.intent_signals ?? []),
+    ...(creator.products_sold ?? []),
   ]);
 
   if (brandTopics.length === 0 || creatorTopics.length === 0) {
@@ -54,7 +23,7 @@ export function topicSimilarity(spec: MatchSpec, creator: Creator): ScoreResult 
   for (const bt of brandTopics) {
     let best = 0;
     for (const ct of creatorTopics) {
-      const sim = bt === ct ? 1 : tokenJaccard(bt, ct);
+      const sim = phraseSimilarity(bt, ct);
       if (sim > best) best = sim;
     }
     totalBest += best;
