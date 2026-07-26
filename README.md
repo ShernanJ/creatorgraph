@@ -8,11 +8,26 @@
 
 CreatorGraph is a full-stack creator partnership intelligence app. It analyzes a brand, discovers real Stan.store creators through Google dork/SERP-led discovery, enriches creator storefront and social signals, then ranks the best creator matches with explainable compatibility scoring.
 
-[Recruiter Overview](./docs/recruiter-friendly-creatorgraph-overview.md) ·
-[Technical Pipeline](./docs/stan-store-creator-pipeline.md) ·
+[Demo](#demo) ·
+[How It Works](#the-solution) ·
+[Discovery](#how-creator-discovery-works) ·
+[Architecture](#architecture) ·
 [Run Locally](#run-locally)
 
 </div>
+
+## Table Of Contents
+
+- [Demo](#demo)
+- [Project Origin](#project-origin)
+- [The Problem](#the-problem)
+- [The Solution](#the-solution)
+- [Key Features](#key-features)
+- [How Creator Discovery Works](#how-creator-discovery-works)
+- [Technical Highlights](#technical-highlights)
+- [Architecture](#architecture)
+- [Matchmaking Model](#matchmaking-model)
+- [Run Locally](#run-locally)
 
 ## Demo
 
@@ -29,6 +44,12 @@ Suggested full-demo thumbnail:
 ```md
 [![Watch the CreatorGraph demo](./assets/demo-thumbnail.png)](VIDEO_LINK)
 ```
+
+## Project Origin
+
+I built CreatorGraph during a Stan co-working build-in-public event, which is why the project is centered around `stan.store` creators.
+
+The app also playfully riffs on Stan's "Stanley" assistant concept. I named the brand-facing agent "Stan-Lee" and used a custom Stan-Lee icon as a light parody while exploring what a brand-side creator partnership agent could look like inside the Stan ecosystem.
 
 ## The Problem
 
@@ -143,8 +164,6 @@ Core tables:
 | `creators` | Canonical creators used by matchmaking |
 | `matches` | Brand-to-creator match results |
 
-For the implementation-heavy version, see [the Stan.store creator pipeline doc](./docs/stan-store-creator-pipeline.md).
-
 ## Matchmaking Model
 
 Each brand-creator pair receives a normalized score from deterministic modules:
@@ -235,11 +254,6 @@ Environment variables:
 - Social metrics are currently evidence/prior-based estimates rather than deep platform analytics.
 - Semantic matching is deterministic and taxonomy-based; embeddings could improve adjacent-topic recall.
 - Production crawling would need stronger rate limits, queueing, observability, and retry policy.
-
-## Documentation
-
-- [Recruiter-friendly overview](./docs/recruiter-friendly-creatorgraph-overview.md)
-- [Stan.store creator scraping pipeline](./docs/stan-store-creator-pipeline.md)
 
 ## Author
 
