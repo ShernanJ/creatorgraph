@@ -1,51 +1,5 @@
 import type { Creator, MatchSpec, ScoreResult } from "../types";
-
-function normalize(s: string) {
-  return s
-    .trim()
-    .toLowerCase()
-    .replace(/\bcontent creators\b/g, "creator")
-    .replace(/\bcreators\b/g, "creator")
-    .replace(/\binfluencers\b/g, "influencer")
-    .replace(/\bsmall businesses\b/g, "small business")
-    .replace(/\s+/g, " ");
-}
-
-function tokens(s: string) {
-  return normalize(s)
-    .split(/[^a-z0-9]+/)
-    .filter(Boolean)
-    .map((token) => {
-      if (token.length > 4 && token.endsWith("ies")) return `${token.slice(0, -3)}y`;
-      if (token.length > 4 && token.endsWith("s") && !token.endsWith("ss")) {
-        return token.slice(0, -1);
-      }
-      return token;
-    });
-}
-
-function tokenOverlap(a: string, b: string) {
-  const aa = new Set(tokens(a));
-  const bb = new Set(tokens(b));
-  if (aa.size === 0 || bb.size === 0) return 0;
-  let inter = 0;
-  for (const t of aa) {
-    if (bb.has(t)) inter += 1;
-  }
-  return inter / Math.max(1, Math.min(aa.size, bb.size));
-}
-
-function uniq(values: string[]) {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const raw of values) {
-    const value = normalize(raw);
-    if (!value || seen.has(value)) continue;
-    seen.add(value);
-    out.push(value);
-  }
-  return out;
-}
+import { phraseSimilarity, uniqNormalizedPhrases } from "../semantic";
 
 function clamp01(x: number) {
   if (!Number.isFinite(x)) return 0;
@@ -53,8 +7,8 @@ function clamp01(x: number) {
 }
 
 export function audienceFit(spec: MatchSpec, creator: Creator): ScoreResult {
-  const brandAudiences = uniq(spec.audiences ?? []);
-  const creatorAudiences = uniq([
+  const brandAudiences = uniqNormalizedPhrases(spec.audiences ?? []);
+  const creatorAudiences = uniqNormalizedPhrases([
     ...(creator.audience_types ?? []),
     ...(creator.metrics?.compatibility_signals?.audience_signals ?? []),
   ]);
@@ -67,7 +21,7 @@ export function audienceFit(spec: MatchSpec, creator: Creator): ScoreResult {
   for (const ba of brandAudiences) {
     let best = 0;
     for (const ca of creatorAudiences) {
-      const sim = ba === ca ? 1 : tokenOverlap(ba, ca);
+      const sim = phraseSimilarity(ba, ca);
       if (sim > best) best = sim;
     }
     totalBest += best;

@@ -163,6 +163,79 @@ const FIXTURES: Fixture[] = [
     ],
     expectedTopCreatorNiche: "ecommerce & marketing",
   },
+  {
+    name: "taxonomy aliases should connect adjacent wellness language",
+    brand: {
+      category: "wellness & nutrition",
+      preferred_platforms: ["instagram"],
+      target_audience: ["health-conscious women"],
+      goals: ["sales"],
+      campaign_angles: ["gut health education"],
+      match_topics: ["supplement routines", "meal prep"],
+    },
+    creators: [
+      {
+        niche: "healthy cooking",
+        platforms: ["instagram"],
+        audience_types: ["women", "busy professionals"],
+        products_sold: ["meal plan", "gut health guide"],
+        estimated_engagement: 0.036,
+        metrics: {
+          top_topics: ["healthy recipes", "meal prep"],
+          compatibility_signals: { niche_confidence: 0.74, confidence: 0.76 },
+        },
+      },
+      {
+        niche: "business coaching",
+        platforms: ["instagram"],
+        audience_types: ["founders"],
+        products_sold: ["sales script template"],
+        estimated_engagement: 0.075,
+        metrics: {
+          top_topics: ["consulting", "sales calls"],
+          compatibility_signals: { niche_confidence: 0.85, confidence: 0.8 },
+        },
+      },
+    ],
+    expectedTopCreatorNiche: "healthy cooking",
+  },
+  {
+    name: "priority boost should understand alias language",
+    brand: {
+      category: "ecommerce & marketing",
+      preferred_platforms: ["tiktok"],
+      target_audience: ["small businesses"],
+      goals: ["source UGC creative"],
+      campaign_angles: ["performance ads"],
+      match_topics: ["creator content"],
+      priority_topics: ["Shopify brand owners"],
+    },
+    creators: [
+      {
+        niche: "ecommerce & marketing",
+        platforms: ["tiktok"],
+        audience_types: ["ecommerce founders"],
+        products_sold: ["UGC content package"],
+        estimated_engagement: 0.035,
+        metrics: {
+          top_topics: ["DTC ads", "shopify growth"],
+          compatibility_signals: { niche_confidence: 0.72, confidence: 0.74 },
+        },
+      },
+      {
+        niche: "business coaching",
+        platforms: ["tiktok"],
+        audience_types: ["small businesses"],
+        products_sold: ["founder sales playbook"],
+        estimated_engagement: 0.055,
+        metrics: {
+          top_topics: ["founder coaching", "sales calls"],
+          compatibility_signals: { niche_confidence: 0.82, confidence: 0.78 },
+        },
+      },
+    ],
+    expectedTopCreatorNiche: "ecommerce & marketing",
+  },
 ];
 
 export function runMatchFixtures() {
