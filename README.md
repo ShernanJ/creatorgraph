@@ -4,117 +4,55 @@
 
 # CreatorGraph
 
-### Discover, enrich, and match Stan.store creators with brands.
+Creator discovery and brand-fit engine that turns messy public web data into explainable creator recommendations.
 
-CreatorGraph is a full-stack creator partnership intelligence app. It analyzes a brand, discovers real Stan.store creators through Google dork/SERP-led discovery, enriches creator storefront and social signals, then ranks the best creator matches with explainable compatibility scoring.
-
-[Demo](#demo) ·
-[How It Works](#the-solution) ·
-[Discovery](#how-creator-discovery-works) ·
-[Architecture](#architecture) ·
-[Run Locally](#run-locally)
+[Portfolio Case Study](https://shernanjavier.com/work/creatorgraph) · [Architecture](#architecture) · [Run Locally](#run-locally)
 
 </div>
 
-## Table Of Contents
+## What it does
 
-- [Demo](#demo)
-- [Project Origin](#project-origin)
-- [The Problem](#the-problem)
-- [The Solution](#the-solution)
-- [Key Features](#key-features)
-- [How Creator Discovery Works](#how-creator-discovery-works)
-- [Technical Highlights](#technical-highlights)
-- [Architecture](#architecture)
-- [Matchmaking Model](#matchmaking-model)
-- [Run Locally](#run-locally)
+CreatorGraph helps brands find creators who actually fit a campaign.
 
-## Demo
-
-> Add a short GIF here after recording the product flow.
-
-Suggested GIF flow:
+It analyzes a brand, discovers publicly indexed creators across the web, enriches their storefront and social signals, resolves fragmented identities, and ranks the strongest matches with explainable compatibility scores.
 
 ```text
-Enter brand URL -> Build brand profile -> View ranked creators -> Inspect match reasons
-```
+Brand URL
+   ↓
+Brand profile
+   ↓
+Creator discovery
+   ↓
+Identity resolution
+   ↓
+Storefront + social enrichment
+   ↓
+Compatibility scoring
+   ↓
+Ranked creator matches
+````
 
-Suggested full-demo thumbnail:
+## Technical highlights
 
-```md
-[![Watch the CreatorGraph demo](./assets/demo-thumbnail.png)](VIDEO_LINK)
-```
+* Built a creator discovery pipeline using targeted Google/SERP queries across public web sources
+* Used Playwright and Patchright to crawl JavaScript-rendered Stan.store storefronts
+* Designed identity resolution to connect social accounts, Stan slugs, and personal domains into canonical creator records
+* Preserved raw evidence and extraction snapshots so each stage of the ingestion pipeline remained debuggable
+* Built deterministic compatibility scoring across niche, topic, platform, engagement, and audience fit
+* Added explainable match reasons and module-level diagnostics instead of returning opaque recommendation scores
+* Created fixture-based regression checks for matchmaking behavior
 
-## Project Origin
+## Stack
 
-I built CreatorGraph during a Stan co-working build-in-public event, which is why the project is centered around `stan.store` creators.
+`Next.js` · `React` · `TypeScript` · `PostgreSQL` · `Playwright` · `Patchright` · `Groq` · `SerpAPI`
 
-The app also playfully riffs on Stan's "Stanley" assistant concept. I named the brand-facing agent "Stan-Lee" and used a custom Stan-Lee icon as a light parody while exploring what a brand-side creator partnership agent could look like inside the Stan ecosystem.
+## How creator discovery works
 
-## The Problem
+CreatorGraph does not depend on a public Stan.store creator directory.
 
-Finding relevant creators is fragmented and manual. Brands often need to search across social platforms, inspect storefronts one by one, estimate audience fit, and guess whether a creator is a good campaign match.
+Instead, it uses targeted search queries to locate publicly indexed profiles that reference Stan.store.
 
-CreatorGraph turns that messy process into a structured pipeline.
-
-## The Solution
-
-```mermaid
-flowchart LR
-  A["Brand URL"] --> B["Brand Profile"]
-  B --> C["Creator Discovery"]
-  C --> D["Stan.store Enrichment"]
-  D --> E["Creator Database"]
-  E --> F["Compatibility Scoring"]
-  F --> G["Ranked Matches"]
-  G --> H["Outreach"]
-```
-
-CreatorGraph builds structured data on both sides of the marketplace:
-
-| Side | Signals |
-| --- | --- |
-| Brand | Category, audience, goals, campaign angles, preferred platforms, match topics |
-| Creator | Niche, platforms, products sold, Stan.store offers, pricing, social links, engagement estimates |
-
-The output is a ranked creator shortlist with reasons, score breakdowns, and outreach context.
-
-## Key Features
-
-| Feature | What It Does |
-| --- | --- |
-| Brand analysis | Crawls and analyzes a brand website into a structured campaign profile |
-| Google dork creator discovery | Uses targeted `site:` queries to find social profiles that mention Stan.store |
-| Stan.store scraping | Browser-crawls `https://stan.store/{slug}` pages to extract creator offers and profile signals |
-| Identity resolution | Links social accounts, Stan slugs, and domains into creator identities |
-| Creator enrichment | Converts raw profile/storefront evidence into canonical creator records |
-| Explainable matchmaking | Scores creators across niche, topic, platform, engagement, and audience fit |
-| Outreach generation | Uses the matched creator and brand context to draft campaign outreach |
-
-## Screenshots To Add
-
-Add screenshots or GIFs in this order for the strongest portfolio walkthrough:
-
-1. Brand URL intake
-2. Stan-Lee brand chat or analysis screen
-3. Creator explorer or creator deck
-4. Match result cards
-5. Compatibility breakdown
-6. Outreach generation
-
-Suggested captions:
-
-- "Brand URL intake starts the pipeline."
-- "Stan-Lee turns brand context into creator strategy."
-- "Creator cards show fit score, niche, platform reach, and Stan links."
-- "The scraper converts Stan storefronts into structured creator signals."
-- "The matcher ranks creators with explainable reasons."
-
-## How Creator Discovery Works
-
-CreatorGraph does not rely on a Stan.store creator directory. It uses Google dork-style search queries to find indexed social profiles that publicly reference Stan.store.
-
-Examples from the app:
+Examples:
 
 ```text
 site:instagram.com "https://stan.store/"
@@ -124,20 +62,51 @@ site:linkedin.com/in "stan.store/"
 site:x.com "Website: stan.store/" "followers"
 ```
 
-Those search results are normalized into raw account records, resolved into creator identities, and then used to crawl the actual Stan storefronts.
+Search results are normalized into raw account records, resolved into creator identities, and then used to crawl the relevant Stan.store storefronts.
 
-## Technical Highlights
+The pipeline supports multiple search paths including Google, DuckDuckGo, and SerpAPI.
 
-- Next.js app router with React and TypeScript
-- PostgreSQL data model for raw evidence, identities, enriched profiles, creators, and matches
-- Playwright/Patchright browser automation for JavaScript-rendered Stan.store pages
-- SERP-led creator discovery with Google, DuckDuckGo, or SerpAPI execution paths
-- Deterministic identity resolution using Stan slugs, personal domains, and cross-link evidence
-- Modular compatibility scoring with explainable reasons and confidence-aware weighting
-- Semantic alias layer for terms like `skin care`, `skincare`, `UGC`, `creator content`, and `Shopify brand owners`
-- Fixture-based regression checks for matchmaking behavior
+## Matchmaking
+
+CreatorGraph builds structured profiles for both sides of the marketplace.
+
+| Brand signals       | Creator signals      |
+| ------------------- | -------------------- |
+| Category            | Niche                |
+| Audience            | Platforms            |
+| Campaign goals      | Products sold        |
+| Campaign angles     | Stan.store offers    |
+| Preferred platforms | Pricing              |
+| Match topics        | Social links         |
+|                     | Engagement estimates |
+
+Each brand-creator pair receives a normalized score from several modules:
+
+| Module              | Evaluates                                                  |
+| ------------------- | ---------------------------------------------------------- |
+| `nicheAffinity`     | Brand category vs. creator niche                           |
+| `topicSimilarity`   | Campaign goals and topics vs. creator content and products |
+| `platformAlignment` | Preferred platforms vs. creator presence                   |
+| `engagementFit`     | Direct or derived engagement                               |
+| `audienceFit`       | Brand audience vs. creator audience signals                |
+
+The final recommendation includes score breakdowns and human-readable reasons so the ranking can be inspected rather than treated as a black box.
 
 ## Architecture
+
+```mermaid
+flowchart LR
+  A["Brand URL"] --> B["Brand Profile"]
+  B --> C["Creator Discovery"]
+  C --> D["Raw Evidence"]
+  D --> E["Identity Resolution"]
+  E --> F["Stan + Social Enrichment"]
+  F --> G["Canonical Creators"]
+  G --> H["Compatibility Scoring"]
+  H --> I["Ranked Matches"]
+```
+
+The data model keeps ingestion stages separate:
 
 ```mermaid
 flowchart TD
@@ -150,66 +119,116 @@ flowchart TD
   F --> G["matches"]
 ```
 
-Core tables:
+That separation makes it possible to preserve the original evidence, rerun extraction logic, improve identity resolution, and change matchmaking independently.
 
-| Table | Purpose |
-| --- | --- |
-| `brands` | Brand profiles and campaign signals |
-| `raw_accounts` | Search result evidence from creator discovery |
-| `raw_account_extractions` | Versioned parser snapshots from raw account evidence |
-| `creator_identities` | Canonical creator identities |
-| `creator_identity_accounts` | Social accounts linked to identities |
-| `creator_stan_profiles` | Scraped Stan.store storefront data |
-| `creator_social_profiles` | Estimated platform metrics |
-| `creators` | Canonical creators used by matchmaking |
-| `matches` | Brand-to-creator match results |
-
-## Matchmaking Model
-
-Each brand-creator pair receives a normalized score from deterministic modules:
-
-| Module | Evaluates |
-| --- | --- |
-| `nicheAffinity` | Brand category vs creator niche |
-| `topicSimilarity` | Brand goals/topics vs creator topics, products, and intent signals |
-| `platformAlignment` | Preferred brand platforms vs creator platform presence/performance |
-| `engagementFit` | Direct or derived creator engagement |
-| `audienceFit` | Brand audience vs creator audience signals |
-
-The result includes human-readable reasons and module-level diagnostics so the recommendation can be inspected.
-
-## Engineering Decisions
+## Engineering decisions
 
 ### Why deterministic matching before embeddings?
 
-The first version uses modular scoring plus a shared taxonomy and alias-aware similarity layer. This keeps rankings explainable, reproducible, inexpensive, and easy to test before introducing embedding infrastructure.
+The first version uses modular scoring with a shared taxonomy and alias-aware similarity layer.
 
-### Why Google dork/SERP-led discovery?
+That keeps rankings:
 
-Stan.store does not provide a public creator directory suited to this workflow. The app therefore uses targeted search queries to locate publicly indexed social profiles containing Stan.store links, then crawls only the resolved storefronts.
+* explainable
+* reproducible
+* inexpensive
+* easy to regression test
+
+Embeddings could improve adjacent-topic recall later, but they were not required to validate the core matching pipeline.
+
+### Why SERP-led discovery?
+
+Stan.store does not expose a public creator directory suited to this workflow.
+
+Targeted search queries provide a way to discover publicly indexed creators first, then crawl only the storefronts that have already been resolved.
 
 ### Why preserve raw evidence?
 
-The data model keeps raw search rows, extraction snapshots, identity links, enriched Stan profiles, and final creator records separate. This makes the pipeline easier to debug and lets each stage improve independently.
+Creator data moves through several stages:
 
-## Tech Stack
+```text
+search result
+    ↓
+raw evidence
+    ↓
+extraction
+    ↓
+identity
+    ↓
+enrichment
+    ↓
+creator
+    ↓
+match
+```
 
-| Area | Technology |
-| --- | --- |
-| Application | Next.js, React, TypeScript |
-| Database | PostgreSQL |
-| Browser automation | Playwright, Patchright |
-| AI analysis | Groq |
-| Search discovery | Google SERP, DuckDuckGo HTML search, SerpAPI |
-| Validation | ESLint, Next build, matchmaking fixtures |
+Keeping those stages separate makes the system easier to debug and lets individual parsers or enrichment steps improve without losing the original source data.
 
-## Run Locally
+## Project origin
+
+I built CreatorGraph during a Stan co-working build-in-public event.
+
+That is why the initial dataset focuses on `stan.store` creators.
+
+The brand-facing agent is called **Stan-Lee**, a small riff on Stan's Stanley assistant concept while exploring what a creator partnership agent could look like from the brand side.
+
+<details>
+<summary><strong>Data model</strong></summary>
+
+| Table                       | Purpose                                       |
+| --------------------------- | --------------------------------------------- |
+| `brands`                    | Brand profiles and campaign signals           |
+| `raw_accounts`              | Search result evidence from creator discovery |
+| `raw_account_extractions`   | Versioned parser snapshots                    |
+| `creator_identities`        | Canonical creator identities                  |
+| `creator_identity_accounts` | Social accounts connected to identities       |
+| `creator_stan_profiles`     | Scraped Stan.store storefront data            |
+| `creator_social_profiles`   | Estimated platform metrics                    |
+| `creators`                  | Canonical creators used by matchmaking        |
+| `matches`                   | Brand-to-creator match results                |
+
+</details>
+
+<details>
+<summary><strong>Implementation details</strong></summary>
+
+### Creator enrichment
+
+CreatorGraph converts fragmented public evidence into canonical creator records using:
+
+* Stan.store slugs
+* personal domains
+* social profile links
+* cross-link evidence
+* storefront metadata
+* platform signals
+
+### Semantic matching
+
+The matching layer includes aliases for related concepts such as:
+
+```text
+skin care ↔ skincare
+UGC ↔ creator content
+Shopify ↔ ecommerce
+```
+
+This improves deterministic topic matching without requiring embeddings for every comparison.
+
+### Validation
+
+Matchmaking behavior can be checked against fixtures so changes to taxonomy, aliases, or scoring weights do not silently change expected recommendations.
+
+</details>
+
+<details>
+<summary><strong>Run locally</strong></summary>
 
 Prerequisites:
 
-- Node.js
-- PostgreSQL
-- `pnpm`
+* Node.js
+* PostgreSQL
+* `pnpm`
 
 Install and start:
 
@@ -236,25 +255,31 @@ pnpm seed
 
 Environment variables:
 
-| Variable | Purpose |
-| --- | --- |
-| `DATABASE_URL` | PostgreSQL connection string |
-| `GROQ_API_KEY` | Brand/profile AI analysis |
-| `GROQ_MODEL` | Optional Groq model override |
-| `NEXT_PUBLIC_SITE_URL` | App URL for server-side API calls |
-| `SERP_API_KEY` / `SERPAPI_API_KEY` | Optional SerpAPI search execution |
-| `CREATOR_DISCOVERY_ENGINE` | `auto`, `google`, `duckduckgo`, or `serpapi` |
-| `CREATOR_DISCOVERY_BROWSER` | `playwright` or `patchright` |
-| `CREATOR_STAN_ENRICH_BROWSER` | `playwright` or `patchright` |
+```text
+DATABASE_URL
+GROQ_API_KEY
+GROQ_MODEL
+NEXT_PUBLIC_SITE_URL
+SERP_API_KEY
+SERPAPI_API_KEY
+CREATOR_DISCOVERY_ENGINE
+CREATOR_DISCOVERY_BROWSER
+CREATOR_STAN_ENRICH_BROWSER
+```
 
-## Limitations And Next Steps
+</details>
 
-- Search coverage depends on public indexed profiles.
-- Stan.store layout changes may require scraper updates.
-- Social metrics are currently evidence/prior-based estimates rather than deep platform analytics.
-- Semantic matching is deterministic and taxonomy-based; embeddings could improve adjacent-topic recall.
-- Production crawling would need stronger rate limits, queueing, observability, and retry policy.
+<details>
+<summary><strong>Limitations</strong></summary>
+
+* Discovery coverage depends on publicly indexed profiles
+* Stan.store layout changes can require scraper updates
+* Social metrics are currently evidence/prior-based estimates rather than deep platform analytics
+* Semantic matching is deterministic and taxonomy-based
+* A production crawler would need stronger queueing, retry policy, rate limiting, and observability
+
+</details>
 
 ## Author
 
-Built by Shernan Javier.
+Built by [Shernan Javier](https://shernanjavier.com).
