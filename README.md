@@ -2,7 +2,7 @@
 
 Creator discovery and brand-fit engine that turns messy public web data into explainable creator recommendations.
 
-<img src="./public/Stan-Lee-Agent.png" width="96" alt="Stan-Lee agent" />
+![CreatorGraph](./.github/assets/hero.webp)
 
 [Portfolio Case Study](https://shernanjavier.com/work/creatorgraph)
 
